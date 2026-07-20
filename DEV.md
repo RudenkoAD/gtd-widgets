@@ -116,6 +116,17 @@ cd D:\projects\claude_home\gtd_widgets
 
 Обёртка — `engine/QuickJsEngine.kt`, мост — `assets/widget-bridge.js`. Приёмы:
 
+- **`QuickJSLoader.init()` ОБЯЗАТЕЛЕН до первого `QuickJSContext.create()`.**
+  Обёртка НЕ грузит `.so` автоматически: в `QuickJSContext` нет статического
+  инициализатора, а `QuickJSLoader.init()` (пакет `com.whl.quickjs.android`)
+  делает `System.loadLibrary("quickjs-android-wrapper")`. Без него конструктор
+  `QuickJSContext` бросает `QuickJSException: The so library must be initialized
+  before createContext! QuickJSLoader.init should be called…`, а сырой JNI-вызов —
+  `UnsatisfiedLinkError: No implementation found for … createRuntime()`. Это был
+  корень дефекта «креш по Собрать Превью» + «виджеты вечно Загрузка…» (JVM-тесты
+  зелёные, т.к. QuickJS в них не вызывается). `QuickJsEngine.create()` вызывает
+  `ensureNativeLoaded()` один раз и заворачивает ЛЮБОЙ сбой инициализации в
+  `EngineException`, чтобы превью/виджеты показали текст ошибки, а не падали.
 - `val ctx = QuickJSContext.create()` — создать контекст (привязан к потоку,
   НЕ потокобезопасен; см. `EngineRunner` — выделенный однопоточный диспетчер).
 - `ctx.evaluate(scriptString)` — выполнить JS. Обёртка после каждого
@@ -136,3 +147,48 @@ cd D:\projects\claude_home\gtd_widgets
 
 См. `WIDGET_CORE_VERSION.md`. Кратко: в репо плагина
 `npm run build:widget-core`, затем в этом репо `gradlew :app:vendorWidgetCore`.
+
+## 9. Проверка JNI-пути на эмуляторе (QuickJS вне JVM)
+
+JVM-тесты НЕ исполняют нативный QuickJS (нет `.so`), поэтому дефекты уровня JNI
+(например, незагруженная библиотека — см. §7) ловятся ТОЛЬКО на устройстве/эмуляторе.
+Чистая логика границы движка вынесена и покрыта тестами (`EngineReplyTest`,
+`WidgetErrorTextTest`, `WidgetBodyStateTest`); нативную часть проверяем так:
+
+**Эмулятор без прав администратора (Windows 10).** Стоит устаревший, но рабочий
+HAXM (`googlehaxm`/`IntelHaxm` — `Running`). Emulator 36 (из `sdkmanager`) HAXM НЕ
+принимает (`FATAL: HAXM no longer supported`), а WHPX/AEHD требуют прав админа.
+Решение — портативный emulator 33.1.24 (поддерживает HAXM), распакованный на `D:`:
+
+```powershell
+# один раз: система-образ и AVD (хранилище AVD — на D:, C: почти полон)
+$env:JAVA_HOME='D:\gtd-toolchain\jdk-17'; $SDK='D:\gtd-toolchain\Android\Sdk'
+$env:ANDROID_AVD_HOME='D:\gtd-toolchain\avd'
+& "$SDK\cmdline-tools\latest\bin\sdkmanager.bat" --sdk_root=$SDK "system-images;android-35;google_apis;x86_64"
+'no' | & "$SDK\cmdline-tools\latest\bin\avdmanager.bat" create avd -n gtdtest -k "system-images;android-35;google_apis;x86_64" -d pixel_5 --force
+# emulator 33.1.24 (HAXM): dl.google.com/android/repository/emulator-windows_x64-11237101.zip → D:\gtd-toolchain\emu33
+# запуск (headless, HAXM):
+$env:ANDROID_SDK_ROOT=$SDK; $env:ANDROID_HOME=$SDK
+Start-Process 'D:\gtd-toolchain\emu33\emulator\emulator.exe' -ArgumentList `
+  '-avd','gtdtest','-no-snapshot','-no-boot-anim','-no-audio','-gpu','swiftshader_indirect','-no-window' -WindowStyle Hidden
+```
+
+Ждать загрузки: `adb wait-for-device` + опрос `adb shell getprop sys.boot_completed`=`1`.
+
+**Важно (Git Bash):** для `adb push`/аргументов вида `/sdcard/...` выставляй
+`MSYS_NO_PATHCONV=1` — иначе MSYS ломает путь в `C:/Program Files/Git/sdcard/...`.
+
+**Тестовый vault** (`adb push <vault>/. /sdcard/Documents/testvault`): каталог с
+`.obsidian/plugins/gtd-flow/data.json` (`commonRoot`, `namespaces`),
+`GTD/Inbox.md` (frontmatter `gtd-inbox: true` + задачи; задача с `📅 <сегодня>
+HH:MM 📍 …` уходит в «Сегодня»), `Work/Events.md` (`gtd-events: true`;
+`📅 <сегодня> HH:MM 📍 …` — разовое событие, `🔁 every monday at 10:00 📍 …` — серия).
+
+**Доступ (SAF):** пикер проходится UI-автоматизацией — `adb shell uiautomator dump
+/sdcard/uidump.xml`, разбор bounds, `adb shell input tap X Y`: внутреннее хранилище →
+Documents → testvault → «USE THIS FOLDER» → «ALLOW». Персистентный грант переживает
+`adb install -r`, поэтому настраивается один раз.
+
+**Прогон:** запустить `adb shell am start -n com.gtdflow.widget/.ui.MainActivity`,
+тап «Собрать превью» → на экране данные vault (не креш). Скрин:
+`adb exec-out screencap -p > verify\preview.png`. Логи сбоев: `adb logcat -b crash -d`.

@@ -12,6 +12,21 @@
  * Синхронные экспорты (buildCaptureLine/captureTargetPath) зовём напрямую —
  * возвращают строку сразу; пустой текст захвата бросает исключение (ловим в Kotlin).
  */
+// Минимальный console-шим: контекст QuickJS (wang.harlon.quickjs) без
+// QuickJSLoader.initConsoleLog НЕ имеет глобала console. Ядро зовёт console.error
+// только на аварийных ветках (например, сбой первичного скана), но если такой
+// вызов случится без шима — это ReferenceError, который замаскирует настоящую
+// причину. Определяем no-op console ДО первого вызова ядра.
+if (typeof console === "undefined") {
+    var console = {
+        log: function () {},
+        info: function () {},
+        warn: function () {},
+        error: function () {},
+        debug: function () {},
+    };
+}
+
 var __gtdResult = null;
 var __gtdError = null;
 

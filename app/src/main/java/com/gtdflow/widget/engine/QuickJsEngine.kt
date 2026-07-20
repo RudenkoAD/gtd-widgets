@@ -1,6 +1,7 @@
 package com.gtdflow.widget.engine
 
 import android.content.Context
+import com.whl.quickjs.android.QuickJSLoader
 import com.whl.quickjs.wrapper.QuickJSContext
 import java.io.Closeable
 
@@ -32,10 +33,9 @@ class QuickJsEngine private constructor(
     fun compute(input: WidgetInput): WidgetData {
         callVoid("__gtdRunCompute", input.toJson())
         val raw = callString("__gtdReadCompute")
-        return when {
-            raw.startsWith("OK:") -> WidgetJson.decodeFromString(WidgetData.serializer(), raw.substring(3))
-            raw.startsWith("ERR:") -> throw EngineException(raw.substring(4))
-            else -> throw EngineException("unexpected engine reply: ${raw.take(64)}")
+        return when (val reply = EngineReply.parse(raw)) {
+            is EngineReply.Ok -> WidgetJson.decodeFromString(WidgetData.serializer(), reply.payload)
+            is EngineReply.Err -> throw EngineException(reply.message)
         }
     }
 
@@ -58,6 +58,13 @@ class QuickJsEngine private constructor(
         val f = global.getJSFunction(fn) ?: throw EngineException("bridge fn '$fn' missing")
         try {
             f.call(*args)
+        } catch (e: EngineException) {
+            throw e
+        } catch (e: Throwable) {
+            // Обёртка QuickJS бросает свой QuickJSException (RuntimeException) на JS-ошибке,
+            // а сбой JNI — Error. Оба заворачиваем в EngineException, чтобы вызывающий
+            // код (превью/виджеты) показал текст ошибки, а не падал/висел.
+            throw EngineException("bridge fn '$fn' threw: ${e.message}", e)
         } finally {
             f.release()
         }
@@ -69,6 +76,10 @@ class QuickJsEngine private constructor(
         try {
             return f.call(*args) as? String
                 ?: throw EngineException("bridge fn '$fn' returned non-string")
+        } catch (e: EngineException) {
+            throw e
+        } catch (e: Throwable) {
+            throw EngineException("bridge fn '$fn' threw: ${e.message}", e)
         } finally {
             f.release()
         }
@@ -88,19 +99,55 @@ class QuickJsEngine private constructor(
         private const val CORE_ASSET = "widget-core.js"
         private const val BRIDGE_ASSET = "widget-bridge.js"
 
+        @Volatile
+        private var nativeLoaded = false
+
         /**
-         * Создать движок: поднять контекст QuickJS и загрузить бандл ядра + мост.
-         * Вызывать на том же потоке, где будут вызовы движка.
+         * Загрузить нативную библиотеку QuickJS. КРИТИЧНО: обёртка
+         * wang.harlon.quickjs НЕ грузит .so автоматически (в QuickJSContext нет
+         * статического инициализатора) — её обязан поднять QuickJSLoader.init()
+         * (System.loadLibrary), иначе первый же нативный вызов внутри
+         * QuickJSContext.create() падает UnsatisfiedLinkError. System.loadLibrary
+         * идемпотентна, но храним флаг, чтобы не дёргать её на каждый расчёт.
+         */
+        private fun ensureNativeLoaded() {
+            if (nativeLoaded) return
+            synchronized(this) {
+                if (nativeLoaded) return
+                QuickJSLoader.init()
+                nativeLoaded = true
+            }
+        }
+
+        /**
+         * Создать движок: загрузить нативную библиотеку, поднять контекст QuickJS,
+         * загрузить бандл ядра + мост. Вызывать на том же потоке, где будут вызовы
+         * движка. ЛЮБОЙ сбой (в т.ч. UnsatisfiedLinkError при отсутствии .so под ABI)
+         * заворачивается в [EngineException] — вызывающий код показывает текст ошибки,
+         * а не роняет процесс / не виснет в «Загрузка…».
          */
         fun create(context: Context): QuickJsEngine {
             val core = readAsset(context, CORE_ASSET)
             val bridge = readAsset(context, BRIDGE_ASSET)
-            val ctx = QuickJSContext.create()
+            try {
+                ensureNativeLoaded()
+            } catch (e: Throwable) {
+                throw EngineException("QuickJS native lib not loaded: ${e.message}", e)
+            }
+            val ctx = try {
+                QuickJSContext.create()
+            } catch (e: Throwable) {
+                throw EngineException("QuickJS context create failed: ${e.message}", e)
+            }
             try {
                 ctx.evaluate(core)
                 ctx.evaluate(bridge)
-            } catch (e: Exception) {
-                ctx.destroy()
+            } catch (e: Throwable) {
+                try {
+                    ctx.destroy()
+                } catch (_: Throwable) {
+                    // контекст мог не подняться — закрытие best-effort
+                }
                 throw EngineException("engine init failed: ${e.message}", e)
             }
             return QuickJsEngine(ctx)

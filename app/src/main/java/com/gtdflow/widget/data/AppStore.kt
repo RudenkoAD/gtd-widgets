@@ -26,14 +26,19 @@ object AppStore {
     private val KEY_VAULT_NAME = stringPreferencesKey("vault_name")
     private val KEY_TODAY_JSON = stringPreferencesKey("today_json")
     private val KEY_TODAY_UPDATED = stringPreferencesKey("today_updated")
+    private val KEY_TODAY_ERROR = stringPreferencesKey("today_error")
     private val KEY_NAMESPACES = stringPreferencesKey("namespaces_json")
 
     data class VaultConfig(val treeUri: String?, val vaultName: String?) {
         val isConfigured: Boolean get() = !treeUri.isNullOrBlank()
     }
 
-    /** Снимок кэша «сегодня»: сырой JSON секции today (WidgetData.today) и метка «обновлено HH:mm». */
-    data class TodayCache(val todayJson: String?, val updatedHhmm: String?)
+    /**
+     * Снимок кэша «сегодня»: сырой JSON секции today (WidgetData.today), метка
+     * «обновлено HH:mm» и текст последней ошибки расчёта (null, если последний
+     * расчёт успешен — успех очищает ошибку).
+     */
+    data class TodayCache(val todayJson: String?, val updatedHhmm: String?, val error: String?)
 
     fun vaultConfigFlow(context: Context): Flow<VaultConfig> =
         context.appDataStore.data.map { p ->
@@ -52,15 +57,25 @@ object AppStore {
 
     fun todayCacheFlow(context: Context): Flow<TodayCache> =
         context.appDataStore.data.map { p ->
-            TodayCache(p[KEY_TODAY_JSON], p[KEY_TODAY_UPDATED])
+            TodayCache(p[KEY_TODAY_JSON], p[KEY_TODAY_UPDATED], p[KEY_TODAY_ERROR])
         }
 
     suspend fun todayCache(context: Context): TodayCache =
         todayCacheFlow(context).first()
 
+    /** Успешный расчёт: пишем ленту + метку и ОЧИЩАЕМ ошибку. */
     suspend fun saveTodayCache(context: Context, todayJson: String, updatedHhmm: String) {
         context.appDataStore.edit { p ->
             p[KEY_TODAY_JSON] = todayJson
+            p[KEY_TODAY_UPDATED] = updatedHhmm
+            p.remove(KEY_TODAY_ERROR)
+        }
+    }
+
+    /** Сбой расчёта: сохраняем текст ошибки и метку времени (ленту не трогаем). */
+    suspend fun saveTodayError(context: Context, error: String, updatedHhmm: String) {
+        context.appDataStore.edit { p ->
+            p[KEY_TODAY_ERROR] = error
             p[KEY_TODAY_UPDATED] = updatedHhmm
         }
     }

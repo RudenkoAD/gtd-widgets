@@ -17,7 +17,10 @@ class WidgetRefreshWorker(
         try {
             WidgetService.refresh(applicationContext)
             Result.success()
-        } catch (_: Exception) {
+        } catch (_: Throwable) {
+            // Throwable, не Exception: сбой JNI приходит Error'ом (UnsatisfiedLinkError),
+            // Exception его не поймал бы и воркер упал бы с некорректным статусом.
+            // WidgetService уже показал ошибку в виджетах; здесь — только не рухнуть.
             Result.retry()
         }
 }

@@ -15,6 +15,9 @@ object InboxWidgetState {
     val INBOX_JSON = stringPreferencesKey("inbox_json")
     val UPDATED = stringPreferencesKey("updated")
 
+    /** Текст последней ошибки расчёта для этого виджета (отсутствует — успех). */
+    val ERROR = stringPreferencesKey("error")
+
     /** «Общее» — дефолтная метка, когда конфигуратор не задал пространство. */
     const val DEFAULT_NAMESPACE = "Общее"
 

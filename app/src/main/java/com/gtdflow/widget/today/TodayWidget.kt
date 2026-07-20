@@ -41,6 +41,7 @@ import com.gtdflow.widget.engine.TodaySection
 import com.gtdflow.widget.engine.WidgetJson
 import com.gtdflow.widget.ui.MainActivity
 import com.gtdflow.widget.vault.VaultManager
+import com.gtdflow.widget.vault.WidgetBodyState
 import com.gtdflow.widget.vault.WidgetVaultGate
 import com.gtdflow.widget.work.RefreshScheduler
 import com.gtdflow.widget.work.RefreshWidgetsAction
@@ -59,9 +60,10 @@ class TodayWidget : GlanceAppWidget() {
         val hasAccess = treeUri != null && VaultManager.hasAccess(context, treeUri)
         val gate = WidgetVaultGate.of(vault.isConfigured, hasAccess)
         val cache = AppStore.todayCache(context)
-        // Планируем пересчёт только при реальном доступе — иначе refresh всё равно
-        // сделает ранний return и «Загрузка…» зависнет.
-        if (gate == WidgetVaultGate.READY && cache.todayJson == null) {
+        // Планируем пересчёт только при реальном доступе И только пока нет ни данных,
+        // ни зафиксированной ошибки — иначе refresh либо рано выйдет («Загрузка…»
+        // зависнет), либо будет молотить впустую при устойчивой ошибке (её показываем).
+        if (gate == WidgetVaultGate.READY && cache.todayJson == null && cache.error == null) {
             RefreshScheduler.refreshNow(context)
         }
         val section = cache.todayJson?.let {
@@ -75,6 +77,7 @@ class TodayWidget : GlanceAppWidget() {
                     gate = gate,
                     vaultName = vault.vaultName,
                     section = section,
+                    error = cache.error,
                     updatedHhmm = cache.updatedHhmm,
                     nowMinutes = nowMinutes,
                 )
@@ -88,6 +91,7 @@ private fun TodayContent(
     gate: WidgetVaultGate,
     vaultName: String?,
     section: TodaySection?,
+    error: String?,
     updatedHhmm: String?,
     nowMinutes: Int,
 ) {
@@ -104,10 +108,17 @@ private fun TodayContent(
                 CenterNote("Откройте приложение и выберите vault", openAppAction())
             WidgetVaultGate.ACCESS_LOST ->
                 CenterNote("Доступ к vault потерян — откройте приложение и выберите папку", openAppAction())
-            WidgetVaultGate.READY -> when {
-                section == null -> CenterNote("Загрузка…")
-                section.items.isEmpty() -> CenterNote("Свободно 🎉")
-                else -> TodayList(section, vaultName, nowMinutes)
+            WidgetVaultGate.READY -> when (
+                WidgetBodyState.of(
+                    hasData = section != null,
+                    isEmpty = section?.items?.isEmpty() ?: false,
+                    hasError = error != null,
+                )
+            ) {
+                WidgetBodyState.EMPTY -> CenterNote("Свободно 🎉")
+                WidgetBodyState.DATA -> TodayList(section!!, vaultName, nowMinutes)
+                WidgetBodyState.ERROR -> CenterNote("Ошибка: $error", openAppAction())
+                WidgetBodyState.LOADING -> CenterNote("Загрузка…")
             }
         }
     }

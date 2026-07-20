@@ -13,6 +13,7 @@ import com.gtdflow.widget.engine.InboxSection
 import com.gtdflow.widget.engine.NamespaceDef
 import com.gtdflow.widget.engine.TimeUtil
 import com.gtdflow.widget.engine.TodaySection
+import com.gtdflow.widget.engine.WidgetErrorText
 import com.gtdflow.widget.engine.WidgetInput
 import com.gtdflow.widget.engine.WidgetJson
 import com.gtdflow.widget.inbox.InboxWidget
@@ -45,44 +46,68 @@ object WidgetService {
         val treeUri = config.treeUri?.let(Uri::parse) ?: return
         if (!VaultManager.hasAccess(context, treeUri)) return
 
-        // Чтение vault — на IO (много IPC к SAF-провайдеру).
-        val snapshot = withContext(Dispatchers.IO) { VaultReader.read(context, treeUri) }
-        val todayIso = TimeUtil.todayIso()
-        val nowMinutes = TimeUtil.nowMinutes()
-
         val manager = GlanceAppWidgetManager(context)
         val inboxIds = manager.getGlanceIds(InboxWidget::class.java)
 
-        EngineRunner.use(context) { engine ->
-            // «Сегодня» (агрегат всех пространств) + список пространств для конфигуратора
-            val base = engine.compute(
-                WidgetInput(snapshot.files, snapshot.dataJson, todayIso, nowMinutes, null),
-            )
-            val updated = updatedFrom(base.today.generatedAt)
-            AppStore.saveTodayCache(context, WidgetJson.encodeToString(todaySer, base.today), updated)
-            AppStore.saveNamespacesJson(context, WidgetJson.encodeToString(nsSer, base.namespaces))
+        try {
+            // Чтение vault — на IO (много IPC к SAF-провайдеру).
+            val snapshot = withContext(Dispatchers.IO) { VaultReader.read(context, treeUri) }
+            val todayIso = TimeUtil.todayIso()
+            val nowMinutes = TimeUtil.nowMinutes()
 
-            // «Входящие» — по одному расчёту на РАЗЛИЧНОЕ пространство (мемоизация)
-            val perNamespace = HashMap<String, InboxSection>()
-            for (id in inboxIds) {
-                val prefs = getAppWidgetState(context, PreferencesGlanceStateDefinition, id)
-                val ns = InboxWidgetState.namespaceOf(prefs)
-                val section = perNamespace.getOrPut(ns) {
-                    engine.compute(
-                        WidgetInput(snapshot.files, snapshot.dataJson, todayIso, nowMinutes, ns),
-                    ).inbox
-                }
-                updateAppWidgetState(context, id) { mutablePrefs ->
-                    mutablePrefs[InboxWidgetState.INBOX_JSON] =
-                        WidgetJson.encodeToString(inboxSer, section)
-                    mutablePrefs[InboxWidgetState.UPDATED] = updated
+            EngineRunner.use(context) { engine ->
+                // «Сегодня» (агрегат всех пространств) + список пространств для конфигуратора
+                val base = engine.compute(
+                    WidgetInput(snapshot.files, snapshot.dataJson, todayIso, nowMinutes, null),
+                )
+                val updated = updatedFrom(base.today.generatedAt)
+                AppStore.saveTodayCache(context, WidgetJson.encodeToString(todaySer, base.today), updated)
+                AppStore.saveNamespacesJson(context, WidgetJson.encodeToString(nsSer, base.namespaces))
+
+                // «Входящие» — по одному расчёту на РАЗЛИЧНОЕ пространство (мемоизация)
+                val perNamespace = HashMap<String, InboxSection>()
+                for (id in inboxIds) {
+                    val prefs = getAppWidgetState(context, PreferencesGlanceStateDefinition, id)
+                    val ns = InboxWidgetState.namespaceOf(prefs)
+                    val section = perNamespace.getOrPut(ns) {
+                        engine.compute(
+                            WidgetInput(snapshot.files, snapshot.dataJson, todayIso, nowMinutes, ns),
+                        ).inbox
+                    }
+                    updateAppWidgetState(context, id) { mutablePrefs ->
+                        mutablePrefs[InboxWidgetState.INBOX_JSON] =
+                            WidgetJson.encodeToString(inboxSer, section)
+                        mutablePrefs[InboxWidgetState.UPDATED] = updated
+                        mutablePrefs.remove(InboxWidgetState.ERROR) // успех очищает ошибку
+                    }
                 }
             }
+        } catch (t: Throwable) {
+            // ЛЮБОЙ сбой (движок/чтение vault) — не роняем воркер и не оставляем
+            // виджеты в вечной «Загрузка…»: сохраняем текст ошибки, чтобы провайдеры
+            // показали «Ошибка: …» (тап → приложение). Обновление UI — ниже, всегда.
+            recordFailure(context, inboxIds, WidgetErrorText.forThrowable(t))
         }
 
-        // Толкнуть перерисовку виджетов (провайдеры перечитают кэш из состояния).
+        // Толкнуть перерисовку виджетов (провайдеры перечитают кэш/ошибку из состояния).
         TodayWidget().updateAll(context)
         InboxWidget().updateAll(context)
+    }
+
+    /** Записать текст ошибки в кэш «сегодня» и в состояние каждого виджета «входящих». */
+    private suspend fun recordFailure(
+        context: Context,
+        inboxIds: List<androidx.glance.GlanceId>,
+        message: String,
+    ) {
+        val updated = TimeUtil.minutesToHhmm(TimeUtil.nowMinutes())
+        AppStore.saveTodayError(context, message, updated)
+        for (id in inboxIds) {
+            updateAppWidgetState(context, id) { mutablePrefs ->
+                mutablePrefs[InboxWidgetState.ERROR] = message
+                mutablePrefs[InboxWidgetState.UPDATED] = updated
+            }
+        }
     }
 
     /** 'YYYY-MM-DDTHH:mm' → 'HH:mm' (метка «обновлено»). */
