@@ -36,6 +36,7 @@ import androidx.glance.text.TextStyle
 import com.gtdflow.widget.data.AppStore
 import com.gtdflow.widget.engine.AgendaSection
 import com.gtdflow.widget.engine.TimeUtil
+import com.gtdflow.widget.engine.WidgetErrorText
 import com.gtdflow.widget.engine.WidgetJson
 import com.gtdflow.widget.today.FeedItemCard
 import com.gtdflow.widget.ui.MainActivity
@@ -93,7 +94,7 @@ private fun AgendaContent(gate: WidgetVaultGate, vaultName: String?) {
             .background(GlanceTheme.colors.widgetBackground)
             .padding(12.dp),
     ) {
-        Header(updated)
+        Header(updated, stale = section != null && error != null)
         Spacer(GlanceModifier.height(6.dp))
         when (gate) {
             WidgetVaultGate.SELECT_VAULT ->
@@ -121,7 +122,7 @@ private fun openAppAction(): Action =
     )
 
 @Composable
-private fun Header(updated: String?) {
+private fun Header(updated: String?, stale: Boolean) {
     Row(
         modifier = GlanceModifier
             .fillMaxWidth()
@@ -138,7 +139,8 @@ private fun Header(updated: String?) {
             modifier = GlanceModifier.defaultWeight(),
         )
         Text(
-            text = "обновлено ${updated ?: "—"} ⟳",
+            // stale: показан кэш, но последний пересчёт упал — честное « · ошибка».
+            text = "обновлено ${WidgetErrorText.updatedLabel(updated, stale)} ⟳",
             style = TextStyle(fontSize = 11.sp, color = GlanceTheme.colors.onSurfaceVariant),
         )
     }

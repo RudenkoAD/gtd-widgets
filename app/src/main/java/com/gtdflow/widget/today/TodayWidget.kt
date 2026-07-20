@@ -36,6 +36,7 @@ import com.gtdflow.widget.data.AppStore
 import com.gtdflow.widget.engine.TimeUtil
 import com.gtdflow.widget.engine.TodayItem
 import com.gtdflow.widget.engine.TodaySection
+import com.gtdflow.widget.engine.WidgetErrorText
 import com.gtdflow.widget.engine.WidgetJson
 import com.gtdflow.widget.ui.MainActivity
 import com.gtdflow.widget.vault.VaultManager
@@ -99,7 +100,7 @@ private fun TodayContent(
             .background(GlanceTheme.colors.widgetBackground)
             .padding(12.dp),
     ) {
-        Header(section, updatedHhmm)
+        Header(section, updatedHhmm, stale = section != null && error != null)
         Spacer(GlanceModifier.height(6.dp))
         when (gate) {
             WidgetVaultGate.SELECT_VAULT ->
@@ -131,9 +132,10 @@ private fun openAppAction(): Action =
     )
 
 @Composable
-private fun Header(section: TodaySection?, updatedHhmm: String?) {
+private fun Header(section: TodaySection?, updatedHhmm: String?, stale: Boolean) {
     val date = section?.date ?: "Сегодня"
-    val updated = updatedHhmm ?: "—"
+    // stale: показан кэш, но последний пересчёт упал — честное « · ошибка» у метки.
+    val updated = WidgetErrorText.updatedLabel(updatedHhmm, stale)
     Row(
         modifier = GlanceModifier
             .fillMaxWidth()

@@ -43,4 +43,23 @@ class WidgetErrorTextTest {
         assertTrue(line.startsWith("Ошибка: "))
         assertTrue(line.contains("QuickJSLoader.init"))
     }
+
+    // --- updatedLabel: честная метка «обновлено …» у кэша ---
+
+    @Test
+    fun updatedLabelFreshCacheShowsPlainTime() {
+        assertEquals("12:30", WidgetErrorText.updatedLabel("12:30", stale = false))
+    }
+
+    @Test
+    fun updatedLabelStaleCacheAppendsErrorMarker() {
+        // Регрессия: сбой пересчёта не двигает метку, но у кэша появляется « · ошибка».
+        assertEquals("12:30 · ошибка", WidgetErrorText.updatedLabel("12:30", stale = true))
+    }
+
+    @Test
+    fun updatedLabelNoTimestampShowsDash() {
+        assertEquals("—", WidgetErrorText.updatedLabel(null, stale = false))
+        assertEquals("— · ошибка", WidgetErrorText.updatedLabel(null, stale = true))
+    }
 }
