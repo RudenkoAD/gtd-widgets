@@ -119,11 +119,12 @@ dependencies {
 // --- Обновление движка: копирует свежий widget-core.js из репозитория плагина. ---
 // Запускать вручную при обновлении ядра: gradlew :app:vendorWidgetCore
 // Путь-источник можно переопределить: -Pgtd.widgetCoreSrc=<путь к widget-core.js>.
+// Дефолт — соседний клон gtd-flow рядом с этим репозиторием.
 tasks.register<Copy>("vendorWidgetCore") {
     group = "gtd"
     description = "Копирует widget-core.js из репозитория плагина в app/src/main/assets."
     val srcPath = providers.gradleProperty("gtd.widgetCoreSrc")
-        .getOrElse("D:/projects/claude_home/calendar_app/widget-core.js")
+        .getOrElse(rootProject.projectDir.resolve("../gtd-flow/widget-core.js").path)
     val srcFile = file(srcPath)
     onlyIf { srcFile.exists() }
     from(srcFile)

@@ -18,9 +18,13 @@ object TimeUtil {
     /** Минуты от полуночи локального времени (0..1439). */
     fun nowMinutes(now: LocalTime = LocalTime.now()): Int = now.hour * 60 + now.minute
 
-    /** Минуты от полуночи → 'HH:mm' (значения вне 0..1439 усечены в диапазон). */
+    /**
+     * Минуты от полуночи → 'HH:mm'. Отрицательные усечены к 00:00; значения ≥ 24ч
+     * заворачиваются по модулю суток: конец события за полночь (23:00–01:00)
+     * показывается как «01:00», а не бессмысленное «23:59».
+     */
     fun minutesToHhmm(minutes: Int): String {
-        val m = minutes.coerceIn(0, 24 * 60 - 1)
+        val m = if (minutes < 0) 0 else minutes % (24 * 60)
         val h = m / 60
         val mm = m % 60
         return "%02d:%02d".format(h, mm)

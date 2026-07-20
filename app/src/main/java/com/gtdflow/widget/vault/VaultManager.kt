@@ -39,9 +39,13 @@ object VaultManager {
     /**
      * Держим ли ещё persistable-разрешение на сохранённый URI (пользователь мог
      * отозвать доступ или удалить папку). Проверяется по списку постоянных грантов.
+     * Требуем и чтение, и запись: все интерактивные действия виджетов (захват,
+     * чекбокс, правка из шторки) пишут в vault, поэтому грант «только чтение»
+     * фактически бесполезен — честнее сразу отправить выбирать папку заново,
+     * чем ронять каждую запись глубоко в стеке с невнятной ошибкой.
      */
     fun hasAccess(context: Context, treeUri: Uri): Boolean =
         context.contentResolver.persistedUriPermissions.any {
-            it.uri == treeUri && it.isReadPermission
+            it.uri == treeUri && it.isReadPermission && it.isWritePermission
         }
 }
