@@ -3,6 +3,7 @@ package com.gtdflow.widget.work
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import com.gtdflow.widget.perf.Perf
 
 /**
  * Фоновый пересчёт виджетов (WorkManager). Вся работа делегируется WidgetService;
@@ -15,7 +16,10 @@ class WidgetRefreshWorker(
 
     override suspend fun doWork(): Result =
         try {
-            WidgetService.refresh(applicationContext)
+            Perf.mark("worker.start")
+            // Через coalesced — периодика сериализуется с интерактивными пересчётами
+            // (один общий mutex/кэш), не запускает второй проход поверх идущего.
+            WidgetService.refreshCoalesced(applicationContext)
             Result.success()
         } catch (_: Throwable) {
             // Throwable, не Exception: сбой JNI приходит Error'ом (UnsatisfiedLinkError),

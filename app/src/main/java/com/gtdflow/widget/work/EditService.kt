@@ -58,7 +58,15 @@ object EditService {
         oneBasedLine: Int,
         title: String,
         editsJson: String,
-    ): Outcome = save(context, filePath, editsJson) { content ->
+        newTitle: String = title,
+        newLocation: String? = null,
+    ): Outcome = save(
+        context,
+        filePath,
+        editsJson,
+        // Оптимистично поправить текст/место строки во «Входящих» до пересчёта.
+        afterWrite = { OptimisticInbox.editLine(context, filePath, oneBasedLine, newTitle, newLocation) },
+    ) { content ->
         val located = TaskLineEdit.locate(content, oneBasedLine, title) ?: return@save null
         located.index to located.rawLine
     }
@@ -85,6 +93,8 @@ object EditService {
             }.getOrDefault(false)
         }
         if (!ok) return Outcome.Failure(FILE_CHANGED)
+        // Оптимистично убрать задачу из виджетов до пересчёта (как чекбокс).
+        OptimisticInbox.removeLine(context, filePath, oneBasedLine)
         RefreshScheduler.refreshNow(context)
         return Outcome.Success
     }
@@ -97,6 +107,7 @@ object EditService {
         context: Context,
         filePath: String,
         editsJson: String,
+        afterWrite: (suspend () -> Unit)? = null,
         target: (content: String) -> Pair<Int, String>?,
     ): Outcome {
         val treeUri: Uri = VaultManager.treeUri(context)
@@ -128,6 +139,7 @@ object EditService {
         }
         if (!ok) return Outcome.Failure("Не удалось записать изменение")
 
+        afterWrite?.invoke()
         RefreshScheduler.refreshNow(context)
         return Outcome.Success
     }

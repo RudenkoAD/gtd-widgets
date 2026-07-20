@@ -2,6 +2,7 @@ package com.gtdflow.widget.vault
 
 import android.content.Context
 import android.net.Uri
+import android.provider.DocumentsContract
 import androidx.documentfile.provider.DocumentFile
 import java.io.IOException
 
@@ -133,6 +134,10 @@ object VaultWriter {
                 out.write(text.toByteArray(Charsets.UTF_8))
                 out.flush()
                 true
+            }?.also {
+                // Инвалидируем кэш для НАШЕГО же файла: mtime провайдера мог не измениться
+                // в пределах секунды, а скан не должен вернуть старое содержимое.
+                runCatching { VaultContentCache.shared.invalidate(DocumentsContract.getDocumentId(uri)) }
             } ?: false
         } catch (_: IOException) {
             false

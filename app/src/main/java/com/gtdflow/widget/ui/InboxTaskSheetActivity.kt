@@ -198,7 +198,13 @@ class InboxTaskSheetActivity : ComponentActivity() {
                             title = cleanTitle,
                             location = if (location.isBlank()) FieldEdit.Clear else FieldEdit.Set(location.trim()),
                         )
-                        run({ EditService.saveInboxEdit(context, args.file, args.line, args.title, editsJson) }, "Сохранено")
+                        run({
+                            EditService.saveInboxEdit(
+                                context, args.file, args.line, args.title, editsJson,
+                                newTitle = cleanTitle,
+                                newLocation = location.trim().ifBlank { null },
+                            )
+                        }, "Сохранено")
                     },
                 ) { Text(if (busy) "Сохранение…" else "Сохранить") }
             }

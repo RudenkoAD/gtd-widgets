@@ -15,7 +15,6 @@ import androidx.glance.action.Action
 import androidx.glance.action.ActionParameters
 import androidx.glance.action.actionParametersOf
 import androidx.glance.action.clickable
-import androidx.glance.appwidget.CheckBox
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.action.actionStartActivity
@@ -201,10 +200,23 @@ private fun InboxRow(item: InboxItem, aggregate: Boolean, vaultName: String?) {
             .padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        CheckBox(
-            checked = false,
-            onCheckedChange = actionRunCallback<InboxToggleAction>(params),
-        )
+        // Чекбокс — ЧИСТО ВИЗУАЛЬНЫЙ глиф (входящие всегда не отмечены: отмеченная строка
+        // уходит из списка). Тап-зона — охватывающий Box с обычным clickable/actionRunCallback,
+        // НЕ compound-button onCheckedChange: у Glance CheckBox своя рекомпозиция из состояния
+        // ДО записи перекрывала оптимистичный updateAll, и строка «висла» до полного пересчёта
+        // (~1.9 c). Обычный clickable отрисовывает оптимистичный патч ДО пересчёта — тем же
+        // путём (и той же ценой updateAll), что и оптимистичный захват «+».
+        Box(
+            modifier = GlanceModifier
+                .padding(start = 2.dp, end = 8.dp)
+                .clickable(actionRunCallback<InboxToggleAction>(params)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = "☐",
+                style = TextStyle(fontSize = 20.sp, color = GlanceTheme.colors.onSurfaceVariant),
+            )
+        }
         Column(
             modifier = GlanceModifier.defaultWeight().padding(start = 4.dp).clickable(openEdit),
         ) {

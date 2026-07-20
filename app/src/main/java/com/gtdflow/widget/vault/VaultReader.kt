@@ -4,6 +4,7 @@ import android.content.Context
 import android.database.Cursor
 import android.net.Uri
 import android.provider.DocumentsContract
+import com.gtdflow.widget.perf.Perf
 import java.io.IOException
 
 /** Снимок vault для одного расчёта: карта «путь → содержимое .md» + сырой data.json. */
@@ -31,14 +32,37 @@ object VaultReader {
         DocumentsContract.Document.COLUMN_DOCUMENT_ID,
         DocumentsContract.Document.COLUMN_DISPLAY_NAME,
         DocumentsContract.Document.COLUMN_MIME_TYPE,
+        DocumentsContract.Document.COLUMN_LAST_MODIFIED,
     )
+
+    /** Процессный кэш содержимого — перечитываем только изменённые файлы (по mtime). */
+    private val cache = VaultContentCache.shared
+
+    /** Счётчики одного обхода vault — для меток GtdPerf (разбивка скана). */
+    private class ScanStats {
+        var dirs = 0
+        var files = 0
+        var readMs = 0L
+        var cacheHits = 0
+        var cacheReads = 0
+    }
 
     /** Полный снимок: .md со всего дерева (минус служебные папки) + data.json плагина. */
     fun read(context: Context, treeUri: Uri): VaultSnapshot {
+        cache.bind(treeUri.toString())
         val rootId = DocumentsContract.getTreeDocumentId(treeUri)
         val files = LinkedHashMap<String, String>()
-        collectMarkdown(context, treeUri, rootId, "", files)
+        val stats = ScanStats()
+        val startMs = Perf.nowMs()
+        collectMarkdown(context, treeUri, rootId, "", files, stats)
         val dataJson = readDataJson(context, treeUri, rootId)
+        val totalMs = Perf.nowMs() - startMs
+        // enumMs — оценка (обход/курсоры) = всё минус чистое чтение содержимого.
+        Perf.mark(
+            "scan files=${stats.files} dirs=${stats.dirs}" +
+                " enumMs=${totalMs - stats.readMs} readMs=${stats.readMs}" +
+                " cacheHits=${stats.cacheHits} cacheReads=${stats.cacheReads}",
+        )
         return VaultSnapshot(files, dataJson)
     }
 
@@ -55,16 +79,34 @@ object VaultReader {
         parentId: String,
         prefix: String,
         out: MutableMap<String, String>,
+        stats: ScanStats,
     ) {
-        forEachChild(context, treeUri, parentId) { docId, name, mime ->
+        stats.dirs++
+        forEachChild(context, treeUri, parentId) { docId, name, mime, mtime ->
             if (mime == DIR_MIME) {
                 // те же предикаты, что и чистый VaultFileFilter (единый источник правды):
                 // служебные и скрытые каталоги в движок не попадают
                 if (VaultFileFilter.isSkippedDir(name)) return@forEachChild
-                collectMarkdown(context, treeUri, docId, join(prefix, name), out)
+                collectMarkdown(context, treeUri, docId, join(prefix, name), out, stats)
             } else if (VaultFileFilter.isMarkdown(name) && !name.startsWith(".")) {
                 val path = join(prefix, name)
-                readDocument(context, treeUri, docId)?.let { out[path] = it }
+                // Кэш по mtime: неизменённый файл не перечитываем (SAF-IO — узкое место).
+                val cached = cache.get(docId, mtime)
+                if (cached != null) {
+                    stats.cacheHits++
+                    stats.files++
+                    out[path] = cached
+                } else {
+                    val readStart = Perf.nowMs()
+                    val content = readDocument(context, treeUri, docId)
+                    stats.readMs += Perf.nowMs() - readStart
+                    if (content != null) {
+                        stats.cacheReads++
+                        stats.files++
+                        out[path] = content
+                        cache.put(docId, mtime, content)
+                    }
+                }
             }
         }
     }
@@ -84,7 +126,7 @@ object VaultReader {
         context: Context,
         treeUri: Uri,
         parentDocumentId: String,
-        body: (docId: String, name: String, mime: String) -> Unit,
+        body: (docId: String, name: String, mime: String, mtime: Long) -> Unit,
     ) {
         val childrenUri =
             DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, parentDocumentId)
@@ -94,11 +136,14 @@ object VaultReader {
             val idIdx = 0
             val nameIdx = 1
             val mimeIdx = 2
+            val mtimeIdx = 3
             while (c.moveToNext()) {
                 val docId = c.getString(idIdx) ?: continue
                 val name = c.getString(nameIdx) ?: continue
                 val mime = c.getString(mimeIdx) ?: ""
-                body(docId, name, mime)
+                // last_modified бывает null (провайдер не отдал) — тогда 0 (кэш не доверяет).
+                val mtime = if (c.isNull(mtimeIdx)) 0L else c.getLong(mtimeIdx)
+                body(docId, name, mime, mtime)
             }
         }
     }
@@ -117,7 +162,7 @@ object VaultReader {
         dir: Boolean,
     ): String? {
         var found: String? = null
-        forEachChild(context, treeUri, parentId) { docId, childName, mime ->
+        forEachChild(context, treeUri, parentId) { docId, childName, mime, _ ->
             if (found == null && childName == name && (mime == DIR_MIME) == dir) {
                 found = docId
             }

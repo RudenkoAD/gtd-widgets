@@ -21,12 +21,15 @@ import com.gtdflow.widget.engine.WidgetInput
 import com.gtdflow.widget.engine.WidgetJson
 import com.gtdflow.widget.inbox.InboxWidget
 import com.gtdflow.widget.inbox.InboxWidgetState
+import com.gtdflow.widget.perf.Perf
 import com.gtdflow.widget.today.TodayWidget
 import com.gtdflow.widget.vault.VaultManager
 import com.gtdflow.widget.vault.VaultReader
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.builtins.ListSerializer
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Пересчёт данных виджетов: читает vault, гоняет ядро в QuickJS, кладёт результат в
@@ -45,6 +48,35 @@ object WidgetService {
     private val agendaSer = AgendaSection.serializer()
     private val nsSer = ListSerializer(NamespaceDef.serializer())
 
+    // --- слияние (coalesce) пересчётов ---
+    private val refreshMutex = Mutex()
+    private val dirty = AtomicBoolean(false)
+
+    /**
+     * Пересчёт со слиянием: если пересчёт уже идёт, повторный вызов не запускает второй,
+     * а лишь взводит флаг [dirty] — активный проход, закончив, прогонит ещё раз. Так
+     * двойной тап по чекбоксу (или тап + периодика) не дублируют тяжёлую работу.
+     *
+     * Флаг ставится ДО попытки захвата замка, поэтому активный проход гарантированно
+     * увидит запрос в своём цикле `while (dirty)`. Остаётся микроскопическое окно между
+     * последним `dirty=false` и `unlock()`, где запрос мог бы потеряться; для виджета это
+     * безобидно — UI уже пропатчен оптимистично, а periodic/следующая интеракция сверят.
+     */
+    suspend fun refreshCoalesced(context: Context) {
+        dirty.set(true)
+        if (!refreshMutex.tryLock()) {
+            Perf.mark("refresh.coalesced.skip")
+            return
+        }
+        try {
+            while (dirty.getAndSet(false)) {
+                refresh(context)
+            }
+        } finally {
+            refreshMutex.unlock()
+        }
+    }
+
     suspend fun refresh(context: Context) {
         val config = AppStore.vaultConfig(context)
         val treeUri = config.treeUri?.let(Uri::parse) ?: return
@@ -54,17 +86,24 @@ object WidgetService {
         val inboxIds = manager.getGlanceIds(InboxWidget::class.java)
         val agendaIds = manager.getGlanceIds(AgendaWidget::class.java)
 
+        Perf.mark("refresh.start")
+        val t0 = Perf.nowMs()
         try {
             // Чтение vault — на IO (много IPC к SAF-провайдеру).
-            val snapshot = withContext(Dispatchers.IO) { VaultReader.read(context, treeUri) }
+            val snapshot = Perf.span("scan.total") {
+                withContext(Dispatchers.IO) { VaultReader.read(context, treeUri) }
+            }
             val todayIso = TimeUtil.todayIso()
             val nowMinutes = TimeUtil.nowMinutes()
 
+            Perf.span("engine.total", extra = " files=${snapshot.files.size}") {
             EngineRunner.use(context) { engine ->
                 // «Сегодня» (агрегат всех пространств) + список пространств для конфигуратора
-                val base = engine.compute(
-                    WidgetInput(snapshot.files, snapshot.dataJson, todayIso, nowMinutes, null),
-                )
+                val base = Perf.span("engine.compute", extra = " kind=today") {
+                    engine.compute(
+                        WidgetInput(snapshot.files, snapshot.dataJson, todayIso, nowMinutes, null),
+                    )
+                }
                 val updated = updatedFrom(base.today.generatedAt)
                 AppStore.saveTodayCache(context, WidgetJson.encodeToString(todaySer, base.today), updated)
                 AppStore.saveNamespacesJson(context, WidgetJson.encodeToString(nsSer, base.namespaces))
@@ -75,9 +114,11 @@ object WidgetService {
                     val prefs = getAppWidgetState(context, PreferencesGlanceStateDefinition, id)
                     val ns = InboxWidgetState.namespaceOf(prefs)
                     val section = perNamespace.getOrPut(ns) {
-                        engine.compute(
-                            WidgetInput(snapshot.files, snapshot.dataJson, todayIso, nowMinutes, ns),
-                        ).inbox
+                        Perf.span("engine.compute", extra = " kind=inbox ns=$ns") {
+                            engine.compute(
+                                WidgetInput(snapshot.files, snapshot.dataJson, todayIso, nowMinutes, ns),
+                            ).inbox
+                        }
                     }
                     updateAppWidgetState(context, id) { mutablePrefs ->
                         mutablePrefs[InboxWidgetState.INBOX_JSON] =
@@ -93,9 +134,11 @@ object WidgetService {
                     val prefs = getAppWidgetState(context, PreferencesGlanceStateDefinition, id)
                     val days = AgendaWidgetState.daysOf(prefs)
                     val section = perDays.getOrPut(days) {
-                        engine.compute(
-                            WidgetInput(snapshot.files, snapshot.dataJson, todayIso, nowMinutes, null, days),
-                        ).agenda
+                        Perf.span("engine.compute", extra = " kind=agenda days=$days") {
+                            engine.compute(
+                                WidgetInput(snapshot.files, snapshot.dataJson, todayIso, nowMinutes, null, days),
+                            ).agenda
+                        }
                     }
                     updateAppWidgetState(context, id) { mutablePrefs ->
                         mutablePrefs[AgendaWidgetState.AGENDA_JSON] =
@@ -105,6 +148,7 @@ object WidgetService {
                     }
                 }
             }
+            } // engine.total
         } catch (t: Throwable) {
             // ЛЮБОЙ сбой (движок/чтение vault) — не роняем воркер и не оставляем
             // виджеты в вечной «Загрузка…»: сохраняем текст ошибки, чтобы провайдеры
@@ -113,9 +157,12 @@ object WidgetService {
         }
 
         // Толкнуть перерисовку виджетов (провайдеры перечитают кэш/ошибку из состояния).
-        TodayWidget().updateAll(context)
-        InboxWidget().updateAll(context)
-        AgendaWidget().updateAll(context)
+        Perf.span("refresh.update") {
+            TodayWidget().updateAll(context)
+            InboxWidget().updateAll(context)
+            AgendaWidget().updateAll(context)
+        }
+        Perf.mark("refresh.done total=${Perf.nowMs() - t0}ms")
     }
 
     /** Записать текст ошибки в кэш «сегодня» и в состояние виджетов «входящих»/«агенды». */
