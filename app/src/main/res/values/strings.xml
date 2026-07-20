@@ -6,6 +6,8 @@
     <string name="today_widget_description">Почасовая лента дня из vault Obsidian</string>
     <string name="inbox_widget_label">GTD · Входящие</string>
     <string name="inbox_widget_description">Список входящих задач пространства</string>
+    <string name="agenda_widget_label">GTD · Агенда</string>
+    <string name="agenda_widget_description">Лента ближайших дней из vault Obsidian</string>
 
     <!-- MainActivity -->
     <string name="main_title">GTD Flow · виджеты</string>

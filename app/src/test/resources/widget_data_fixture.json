@@ -4,6 +4,7 @@
     "items": [
       {
         "kind": "event",
+        "itemKind": "single-event",
         "title": "Встреча",
         "startMinutes": 600,
         "endMinutes": 660,
@@ -11,10 +12,13 @@
         "location": "офис",
         "file": "GTD/События.md",
         "line": 4,
-        "namespace": "Общее"
+        "namespace": "Общее",
+        "rawLine": "- [ ] Встреча 📅 2026-07-20 ⏰ 10:00-11:00 📍 офис",
+        "recurrenceText": null
       },
       {
         "kind": "task",
+        "itemKind": "task",
         "title": "Позвонить врачу",
         "startMinutes": 840,
         "endMinutes": null,
@@ -22,14 +26,52 @@
         "location": null,
         "file": "GTD/Задачи.md",
         "line": 1,
-        "namespace": "Общее"
+        "namespace": "Общее",
+        "rawLine": "- [ ] Позвонить врачу ⏳ 2026-07-20 14:00",
+        "recurrenceText": null
       }
     ],
     "generatedAt": "2026-07-20T08:30"
   },
+  "agenda": {
+    "days": [
+      {
+        "date": "2026-07-20",
+        "items": [
+          {
+            "kind": "event",
+            "itemKind": "series-occurrence",
+            "title": "Планёрка",
+            "startMinutes": 540,
+            "endMinutes": 570,
+            "allDay": false,
+            "location": null,
+            "file": "GTD/События.md",
+            "line": 8,
+            "namespace": "Работа",
+            "rawLine": "- [ ] Планёрка 🔁 every weekday at 09:00-09:30",
+            "recurrenceText": "every weekday at 09:00-09:30"
+          }
+        ]
+      },
+      {
+        "date": "2026-07-21",
+        "items": []
+      }
+    ]
+  },
   "inbox": {
-    "namespace": "Работа",
-    "items": []
+    "namespace": "Все",
+    "items": [
+      {
+        "title": "Купить билеты",
+        "file": "Работа/Входящие.md",
+        "line": 3,
+        "id": null,
+        "location": "вокзал",
+        "namespace": "Работа"
+      }
+    ]
   },
   "namespaces": [
     {

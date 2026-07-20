@@ -41,4 +41,14 @@ object TimeUtil {
 
     /** Час 0..23 для маркера «текущий час» ленты. */
     fun hourOf(minutes: Int): Int = (minutes.coerceIn(0, 24 * 60 - 1)) / 60
+
+    /**
+     * РЕДАКТИРУЕМОЕ время для поля правки: обычный дефис '-' (не тире), формат, который
+     * принимает buildEditedLine (`HH:mm` | `HH:mm-HH:mm`). Пусто, если времени нет.
+     */
+    fun editableRange(startMinutes: Int?, endMinutes: Int?): String {
+        if (startMinutes == null) return ""
+        val start = minutesToHhmm(startMinutes)
+        return if (endMinutes == null) start else "$start-${minutesToHhmm(endMinutes)}"
+    }
 }

@@ -61,6 +61,24 @@ object VaultWriter {
     }
 
     /**
+     * Прочитать один существующий файл vault по пути (для правки строки). null — файл
+     * не найден или чтение не удалось (вызывающий прерывается, ничего не пишем).
+     */
+    fun readFile(context: Context, treeUri: Uri, filePath: String): String? {
+        val doc = resolveFile(context, treeUri, filePath) ?: return null
+        return readText(context, doc.uri)
+    }
+
+    /**
+     * Перезаписать существующий файл vault целиком (truncate "wt"). false — файл не
+     * найден или запись не удалась.
+     */
+    fun writeFile(context: Context, treeUri: Uri, filePath: String, text: String): Boolean {
+        val doc = resolveFile(context, treeUri, filePath) ?: return false
+        return writeText(context, doc.uri, text)
+    }
+
+    /**
      * Содержимое для перезаписи СУЩЕСТВУЮЩЕГО файла входящих при захвате (чистая логика,
      * тестируется без Context):
      *  • read == null — чтение не удалось: вернуть null → вызывающий прерывается, файл

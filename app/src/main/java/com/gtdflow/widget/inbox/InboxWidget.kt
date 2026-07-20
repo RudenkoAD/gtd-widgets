@@ -44,6 +44,7 @@ import com.gtdflow.widget.engine.InboxItem
 import com.gtdflow.widget.engine.InboxSection
 import com.gtdflow.widget.engine.WidgetJson
 import com.gtdflow.widget.ui.CaptureActivity
+import com.gtdflow.widget.ui.InboxTaskSheetActivity
 import com.gtdflow.widget.ui.MainActivity
 import com.gtdflow.widget.vault.VaultManager
 import com.gtdflow.widget.vault.WidgetVaultGate
@@ -70,16 +71,17 @@ class InboxWidget : GlanceAppWidget() {
         if (gate == WidgetVaultGate.READY && prefs[InboxWidgetState.INBOX_JSON] == null) {
             RefreshScheduler.refreshNow(context)
         }
+        val vaultName = vault.vaultName
         provideContent {
             GlanceTheme {
-                InboxContent(gate = gate)
+                InboxContent(gate = gate, vaultName = vaultName)
             }
         }
     }
 }
 
 @Composable
-private fun InboxContent(gate: WidgetVaultGate) {
+private fun InboxContent(gate: WidgetVaultGate, vaultName: String?) {
     val prefs = currentState<Preferences>()
     val namespace = InboxWidgetState.namespaceOf(prefs)
     val updated = prefs[InboxWidgetState.UPDATED]
@@ -102,7 +104,7 @@ private fun InboxContent(gate: WidgetVaultGate) {
             WidgetVaultGate.READY -> when {
                 section == null -> Note("Загрузка…")
                 section.items.isEmpty() -> Note("Входящих нет")
-                else -> InboxList(section, namespace)
+                else -> InboxList(section, namespace, vaultName)
             }
         }
     }
@@ -170,20 +172,25 @@ private fun AddButton(namespace: String) {
 }
 
 @Composable
-private fun InboxList(section: InboxSection, namespace: String) {
+private fun InboxList(section: InboxSection, namespace: String, vaultName: String?) {
+    val aggregate = InboxWidgetState.isAggregate(namespace)
     LazyColumn(modifier = GlanceModifier.fillMaxSize()) {
         items(section.items, itemId = { it.file.hashCode() * 31L + it.line }) { item ->
-            InboxRow(item, namespace)
+            InboxRow(item, aggregate, vaultName)
         }
     }
 }
 
 @Composable
-private fun InboxRow(item: InboxItem, namespace: String) {
+private fun InboxRow(item: InboxItem, aggregate: Boolean, vaultName: String?) {
     val params: ActionParameters = actionParametersOf(
         InboxToggleAction.KEY_FILE to item.file,
         InboxToggleAction.KEY_LINE to item.line,
         InboxToggleAction.KEY_TITLE to item.title,
+    )
+    // Тап по тексту задачи открывает малый оверлей правки (текст/место/выполнено).
+    val openEdit = actionStartActivity(
+        InboxTaskSheetActivity.intent(LocalContext.current, item, vaultName),
     )
     Row(
         modifier = GlanceModifier
@@ -198,7 +205,9 @@ private fun InboxRow(item: InboxItem, namespace: String) {
             checked = false,
             onCheckedChange = actionRunCallback<InboxToggleAction>(params),
         )
-        Column(modifier = GlanceModifier.defaultWeight().padding(start = 4.dp)) {
+        Column(
+            modifier = GlanceModifier.defaultWeight().padding(start = 4.dp).clickable(openEdit),
+        ) {
             Text(
                 text = item.title,
                 style = TextStyle(fontSize = 14.sp, color = GlanceTheme.colors.onSurface),
@@ -211,6 +220,14 @@ private fun InboxRow(item: InboxItem, namespace: String) {
                     maxLines = 1,
                 )
             }
+        }
+        // Агрегат «Все»: метка пространства справа серым.
+        if (aggregate && item.namespace.isNotBlank()) {
+            Text(
+                text = item.namespace,
+                style = TextStyle(fontSize = 10.sp, color = GlanceTheme.colors.onSurfaceVariant),
+                maxLines = 1,
+            )
         }
     }
 }

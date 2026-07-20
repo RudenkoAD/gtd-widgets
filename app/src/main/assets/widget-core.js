@@ -28,6 +28,7 @@ var GtdWidgetCore = (() => {
   __export(widgetCore_exports, {
     DEFAULT_NS: () => DEFAULT_NS,
     buildCaptureLine: () => buildCaptureLine,
+    buildEditedLine: () => buildEditedLine,
     captureTargetPath: () => captureTargetPath,
     computeWidgetData: () => computeWidgetData
   });
@@ -640,6 +641,64 @@ var GtdWidgetCore = (() => {
     t.segments.push({ kind: "text", text: " " }, { kind: "field", field, emoji, gap: " ", payload });
     return serializeTokens(t);
   }
+  function existingFieldTimes(t, field) {
+    const idxs = fieldIndices(t.segments, field);
+    if (idxs.length === 0) return { time: null, timeEnd: null };
+    const tok = t.segments[idxs[idxs.length - 1]];
+    const { time, timeEnd } = splitDateTimePayload(tok.payload);
+    return { time, timeEnd };
+  }
+  function setField(rawLine, field, value, time, timeEnd) {
+    if (value !== null && parseDatePayload(value).kind !== "date") {
+      throw new Error(`serializeTaskLine: \u043D\u0435 ISO-\u0434\u0430\u0442\u0430: ${JSON.stringify(value)}`);
+    }
+    if (time !== void 0) {
+      if (!isTimedDateField(field)) {
+        throw new Error(`serializeTaskLine: \u043F\u043E\u043B\u0435 ${field} \u043D\u0435 \u0438\u043C\u0435\u0435\u0442 \u0432\u0440\u0435\u043C\u0435\u043D\u0438`);
+      }
+      if (time !== null && !TIME_RE.test(time)) {
+        throw new Error(`serializeTaskLine: \u043D\u0435 \u0432\u0440\u0435\u043C\u044F HH:mm: ${JSON.stringify(time)}`);
+      }
+      if (time !== null && value === null) {
+        throw new Error(`serializeTaskLine: \u0432\u0440\u0435\u043C\u044F \u0431\u0435\u0437 \u0434\u0430\u0442\u044B: ${JSON.stringify(time)}`);
+      }
+    }
+    if (timeEnd !== void 0) {
+      if (!isTimedDateField(field)) {
+        throw new Error(`serializeTaskLine: \u043F\u043E\u043B\u0435 ${field} \u043D\u0435 \u0438\u043C\u0435\u0435\u0442 \u0432\u0440\u0435\u043C\u0435\u043D\u0438`);
+      }
+      if (timeEnd !== null && !TIME_RE.test(timeEnd)) {
+        throw new Error(`serializeTaskLine: \u043D\u0435 \u0432\u0440\u0435\u043C\u044F HH:mm: ${JSON.stringify(timeEnd)}`);
+      }
+      if (timeEnd !== null && value === null) {
+        throw new Error(`serializeTaskLine: \u0432\u0440\u0435\u043C\u044F \u0431\u0435\u0437 \u0434\u0430\u0442\u044B: ${JSON.stringify(timeEnd)}`);
+      }
+    }
+    if (value === null) {
+      return setPayloadField(rawLine, field, DATE_FIELD_EMOJI[field], null);
+    }
+    let effTime = time ?? null;
+    let effTimeEnd = timeEnd ?? null;
+    if (isTimedDateField(field) && (time === void 0 || timeEnd === void 0)) {
+      const existing = existingFieldTimes(mustTokenize(rawLine), field);
+      if (time === void 0) effTime = existing.time;
+      if (timeEnd === void 0) effTimeEnd = time === null ? null : existing.timeEnd;
+    }
+    if (effTimeEnd !== null) {
+      if (effTime === null) {
+        throw new Error(
+          `serializeTaskLine: \u043A\u043E\u043D\u0435\u0446 \u0438\u043D\u0442\u0435\u0440\u0432\u0430\u043B\u0430 \u0431\u0435\u0437 \u0432\u0440\u0435\u043C\u0435\u043D\u0438 \u043D\u0430\u0447\u0430\u043B\u0430: ${JSON.stringify(effTimeEnd)}`
+        );
+      }
+      if (effTimeEnd <= effTime) {
+        throw new Error(
+          `serializeTaskLine: \u043A\u043E\u043D\u0435\u0446 \u0438\u043D\u0442\u0435\u0440\u0432\u0430\u043B\u0430 \u043D\u0435 \u043F\u043E\u0437\u0436\u0435 \u043D\u0430\u0447\u0430\u043B\u0430: ${JSON.stringify(`${effTime}-${effTimeEnd}`)}`
+        );
+      }
+    }
+    const payload = effTime === null ? value : effTimeEnd === null ? `${value} ${effTime}` : `${value} ${effTime}-${effTimeEnd}`;
+    return setPayloadField(rawLine, field, DATE_FIELD_EMOJI[field], payload);
+  }
   function setValueField(rawLine, field, value) {
     let payload = value;
     if (value !== null) {
@@ -647,6 +706,35 @@ var GtdWidgetCore = (() => {
       else assertToken(value, field);
     }
     return setPayloadField(rawLine, field, VALUE_FIELD_EMOJI[field], payload);
+  }
+  function setDescription(rawLine, text) {
+    const canon = text.replace(/\s+/g, " ").trim();
+    const loc = VALUE_FIELD_EMOJI.location;
+    for (const e of ALL_FIELD_EMOJI) {
+      if (e === loc) {
+        for (let idx = canon.indexOf(loc); idx !== -1; idx = canon.indexOf(loc, idx + loc.length)) {
+          if (!isLeadingLocation(canon, idx)) {
+            throw new Error(
+              `serializeTaskLine: \u044D\u043C\u043E\u0434\u0437\u0438 \u043F\u043E\u043B\u044F \u0432 \u0442\u0435\u043A\u0441\u0442\u0435 \u043E\u043F\u0438\u0441\u0430\u043D\u0438\u044F: ${JSON.stringify(text)}`
+            );
+          }
+        }
+        continue;
+      }
+      if (canon.includes(e)) {
+        throw new Error(
+          `serializeTaskLine: \u044D\u043C\u043E\u0434\u0437\u0438 \u043F\u043E\u043B\u044F \u0432 \u0442\u0435\u043A\u0441\u0442\u0435 \u043E\u043F\u0438\u0441\u0430\u043D\u0438\u044F: ${JSON.stringify(text)}`
+        );
+      }
+    }
+    const t = mustTokenize(rawLine);
+    const fieldToks = t.segments.filter((s) => s.kind === "field");
+    const segs = [];
+    if (canon !== "") segs.push({ kind: "text", text: ` ${canon}` });
+    for (const f of fieldToks) segs.push({ kind: "text", text: " " }, f);
+    t.segments = segs;
+    coalesceText(t.segments);
+    return serializeTokens(t);
   }
 
   // src/core/model/gtdState.ts
@@ -1233,6 +1321,12 @@ var GtdWidgetCore = (() => {
       cur = nextOccurrence(rule, cur, anc);
     }
     return out;
+  }
+
+  // src/views/common/dates.ts
+  var DAY_MS = 864e5;
+  function addDaysIso(date, days) {
+    return new Date(Date.parse(date + "T00:00:00Z") + days * DAY_MS).toISOString().slice(0, 10);
   }
 
   // src/views/calendar/timeGrid.ts
@@ -1964,6 +2058,150 @@ var GtdWidgetCore = (() => {
     return { active, defs: settings.namespaces };
   }
 
+  // src/widget/widgetEditLine.ts
+  var ISO_DATE_SHAPE_RE = /^\d{4}-\d{2}-\d{2}$/;
+  var DATE_FIELD_ORDER = ["due", "scheduled", "start"];
+  function err(code) {
+    return { ok: false, error: code };
+  }
+  function hasField(t, field) {
+    return t.segments.some((s) => s.kind === "field" && s.field === field);
+  }
+  function firstDateField(t) {
+    for (const f of DATE_FIELD_ORDER) if (hasField(t, f)) return f;
+    return null;
+  }
+  function fieldDate(t, field) {
+    let payload = null;
+    for (const s of t.segments) if (s.kind === "field" && s.field === field) payload = s.payload;
+    if (payload === null) return null;
+    const m = /^(\d{4}-\d{2}-\d{2})/.exec(payload);
+    return m ? m[1] : null;
+  }
+  function recurrenceToken(t) {
+    let tok = null;
+    for (const s of t.segments) if (s.kind === "field" && s.field === "recurrence") tok = s;
+    return tok;
+  }
+  function stripAtTail(ruleText) {
+    const m = /^(.*?)\s+at\s+\S+\s*$/i.exec(ruleText.trim());
+    return m && m[1] !== void 0 ? m[1].trim() : ruleText.trim();
+  }
+  function parseTimeRange(input) {
+    const s = input.trim();
+    if (s === "") return null;
+    const dash = s.indexOf("-");
+    if (dash === -1) return TIME_RE.test(s) ? { time: s, timeEnd: null } : null;
+    const a = s.slice(0, dash).trim();
+    const b = s.slice(dash + 1).trim();
+    if (!TIME_RE.test(a) || !TIME_RE.test(b) || b <= a) return null;
+    return { time: a, timeEnd: b };
+  }
+  function applySeriesTime(line, timeRange) {
+    const t = tokenizeTaskLine(line);
+    if (t === null) return err("not-a-task");
+    const tok = recurrenceToken(t);
+    if (tok === null) return err("not-a-series");
+    const base = stripAtTail(tok.payload);
+    let newRule;
+    if (timeRange === null) {
+      newRule = base;
+    } else {
+      if (typeof timeRange !== "string") return err("invalid-time-range");
+      const pr = parseTimeRange(timeRange);
+      if (pr === null) return err("invalid-time-range");
+      const tail = pr.timeEnd !== null ? `${pr.time}-${pr.timeEnd}` : pr.time;
+      newRule = `${base} at ${tail}`;
+    }
+    if (isParseError(parseRule(newRule))) return err("invalid-rule");
+    if (tok.gap === "" && tok.payload === "") tok.gap = " ";
+    tok.payload = newRule;
+    return { ok: true, line: serializeTokens(t) };
+  }
+  function applyDateTime(line, dateEdit, timeEdit) {
+    const t = tokenizeTaskLine(line);
+    if (t === null) return err("not-a-task");
+    const field = firstDateField(t) ?? "due";
+    const existingDate = fieldDate(t, field);
+    let newDate;
+    if (dateEdit === void 0) newDate = existingDate;
+    else if (dateEdit === null) newDate = null;
+    else {
+      if (typeof dateEdit !== "string" || !ISO_DATE_SHAPE_RE.test(dateEdit)) return err("invalid-date");
+      newDate = dateEdit;
+    }
+    let timeArg;
+    let timeEndArg;
+    if (timeEdit === void 0) {
+      timeArg = void 0;
+      timeEndArg = void 0;
+    } else if (timeEdit === null) {
+      timeArg = null;
+      timeEndArg = null;
+    } else {
+      if (typeof timeEdit !== "string") return err("invalid-time-range");
+      const pr = parseTimeRange(timeEdit);
+      if (pr === null) return err("invalid-time-range");
+      timeArg = pr.time;
+      timeEndArg = pr.timeEnd;
+    }
+    if (newDate === null && typeof timeArg === "string") return err("time-without-date");
+    try {
+      return { ok: true, line: setField(line, field, newDate, timeArg, timeEndArg) };
+    } catch {
+      return err("invalid-date");
+    }
+  }
+  function editLine(rawLine, editsRaw) {
+    if (typeof rawLine !== "string") return err("not-a-task");
+    const t0 = tokenizeTaskLine(rawLine);
+    if (t0 === null) return err("not-a-task");
+    const edits = editsRaw !== null && typeof editsRaw === "object" ? editsRaw : {};
+    const isSeries = hasField(t0, "recurrence") && firstDateField(t0) === null;
+    if (isSeries && edits.date !== void 0) return err("series-date-not-editable");
+    let line = rawLine;
+    if (edits.title !== void 0) {
+      if (typeof edits.title !== "string") return err("invalid-title");
+      const canon = edits.title.replace(/\s+/g, " ").trim();
+      if (canon === "") return err("empty-title");
+      try {
+        line = setDescription(line, canon);
+      } catch {
+        return err("invalid-title");
+      }
+    }
+    if (edits.location !== void 0) {
+      if (edits.location !== null && typeof edits.location !== "string") {
+        return err("invalid-location");
+      }
+      const loc = edits.location === null ? "" : edits.location.trim();
+      try {
+        line = setValueField(line, "location", loc === "" ? null : loc);
+      } catch {
+        return err("invalid-location");
+      }
+    }
+    if (isSeries) {
+      if (edits.timeRange !== void 0) {
+        const r = applySeriesTime(line, edits.timeRange);
+        if (!r.ok) return r;
+        line = r.line;
+      }
+    } else if (edits.date !== void 0 || edits.timeRange !== void 0) {
+      const r = applyDateTime(line, edits.date, edits.timeRange);
+      if (!r.ok) return r;
+      line = r.line;
+    }
+    return { ok: true, line };
+  }
+  function buildEditedLine(rawLine, edits) {
+    try {
+      return JSON.stringify(editLine(rawLine, edits));
+    } catch (e) {
+      return JSON.stringify({ ok: false, error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
   // src/widget/widgetCore.ts
   async function computeWidgetData(input) {
     const errors = [];
@@ -1984,52 +2222,73 @@ var GtdWidgetCore = (() => {
     } catch (e) {
       errors.push(`index build failed: ${errorMessage(e)}`);
     }
+    const agendaDaysRaw = input && typeof input.agendaDays === "number" && Number.isFinite(input.agendaDays) ? Math.trunc(input.agendaDays) : 0;
+    const agendaDays = Math.max(0, Math.min(30, agendaDaysRaw));
+    const validToday = /^\d{4}-\d{2}-\d{2}$/.test(todayIso);
+    const rangeDates = [todayIso];
+    if (validToday) for (let i = 1; i < agendaDays; i++) rangeDates.push(addDaysIso(todayIso, i));
+    const lastIso = rangeDates[rangeDates.length - 1];
     const todayItems = [];
+    const agendaByDate = /* @__PURE__ */ new Map();
     try {
       const events = allTasks.filter((t) => t.container === "events");
-      const occs = expandEventOccurrences(events, todayIso, todayIso).get(todayIso) ?? [];
-      for (const o of occs) {
-        const startMinutes = o.time !== null ? timeToMinutes(o.time) : null;
-        const endMinutes = o.timeEnd !== null ? timeToMinutes(o.timeEnd) : null;
-        todayItems.push({
-          kind: "event",
-          title: o.title,
-          startMinutes,
-          endMinutes,
-          allDay: startMinutes === null,
-          location: o.location,
-          file: o.task.filePath,
-          line: o.task.lineStart + 1,
-          namespace: fileNsLabel(o.task.filePath, o.task.nsOverride, defs)
-        });
-      }
+      const occMap = expandEventOccurrences(events, todayIso, lastIso);
       const placement = settings.calendarPlacement;
       const candidates = allTasks.filter(
         (t) => !isTemplate(t) && !isDetail(t) && !isEvent(t) && !isArchived(t) && !isDone(t) && !isCancelled(t)
       );
-      const placed = placeEvents(candidates, placement).get(todayIso) ?? [];
-      for (const pe of placed) {
-        const t = pe.task;
-        const time = placedTime(t, pe.field);
-        const timeEnd = placedTimeEnd(t, pe.field);
-        const startMinutes = time !== null ? timeToMinutes(time) : null;
-        const endMinutes = timeEnd !== null ? timeToMinutes(timeEnd) : null;
-        todayItems.push({
-          kind: "task",
-          title: t.description,
-          startMinutes,
-          endMinutes,
-          allDay: startMinutes === null,
-          location: t.location,
-          file: t.filePath,
-          line: t.lineStart + 1,
-          namespace: fileNsLabel(t.filePath, t.nsOverride, defs)
-        });
-      }
-      sortTodayItems(todayItems);
+      const placedMap = placeEvents(candidates, placement);
+      const buildDay = (dateIso) => {
+        const items = [];
+        for (const o of occMap.get(dateIso) ?? []) {
+          const startMinutes = o.time !== null ? timeToMinutes(o.time) : null;
+          const endMinutes = o.timeEnd !== null ? timeToMinutes(o.timeEnd) : null;
+          items.push({
+            kind: "event",
+            itemKind: o.kind === "series" ? "series-occurrence" : "single-event",
+            title: o.title,
+            startMinutes,
+            endMinutes,
+            allDay: startMinutes === null,
+            location: o.location,
+            file: o.task.filePath,
+            line: o.task.lineStart + 1,
+            namespace: fileNsLabel(o.task.filePath, o.task.nsOverride, defs),
+            rawLine: o.task.rawLine,
+            recurrenceText: o.kind === "series" ? o.task.recurrence : null
+          });
+        }
+        for (const pe of placedMap.get(dateIso) ?? []) {
+          const t = pe.task;
+          const time = placedTime(t, pe.field);
+          const timeEnd = placedTimeEnd(t, pe.field);
+          const startMinutes = time !== null ? timeToMinutes(time) : null;
+          const endMinutes = timeEnd !== null ? timeToMinutes(timeEnd) : null;
+          items.push({
+            kind: "task",
+            itemKind: "task",
+            title: t.description,
+            startMinutes,
+            endMinutes,
+            allDay: startMinutes === null,
+            location: t.location,
+            file: t.filePath,
+            line: t.lineStart + 1,
+            namespace: fileNsLabel(t.filePath, t.nsOverride, defs),
+            rawLine: t.rawLine,
+            recurrenceText: null
+          });
+        }
+        sortTodayItems(items);
+        return items;
+      };
+      const todayBuilt = buildDay(todayIso);
+      todayItems.push(...todayBuilt);
+      for (const d of rangeDates) agendaByDate.set(d, d === todayIso ? todayBuilt : buildDay(d));
     } catch (e) {
       errors.push(`today failed: ${errorMessage(e)}`);
     }
+    const agendaDaysList = agendaDays > 0 ? rangeDates.map((d) => ({ date: d, items: agendaByDate.get(d) ?? [] })) : [];
     const inboxActive = resolveWidgetActive(input?.inboxNamespace ?? null, settings, errors, true);
     const inboxItems = [];
     try {
@@ -2046,7 +2305,8 @@ var GtdWidgetCore = (() => {
           file: t.filePath,
           line: t.lineStart + 1,
           id: t.taskId,
-          location: t.location
+          location: t.location,
+          namespace: fileNsLabel(t.filePath, t.nsOverride, defs)
         });
       }
     } catch (e) {
@@ -2058,6 +2318,7 @@ var GtdWidgetCore = (() => {
         items: todayItems,
         generatedAt: `${todayIso}T${minutesToTime(nowMinutes)}`
       },
+      agenda: { days: agendaDaysList },
       inbox: { namespace: nsLabel(inboxActive), items: inboxItems },
       namespaces: defs.map((d) => ({ name: d.name, root: d.root })),
       errors

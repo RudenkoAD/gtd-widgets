@@ -19,16 +19,44 @@
             </intent-filter>
         </activity>
 
-        <!-- Быстрый захват из виджета «Входящие» (диалоговая тема поверх домашнего экрана) -->
+        <!-- Быстрый захват из виджета «Входящие» (нижний оверлей поверх домашнего экрана) -->
         <activity
             android:name=".ui.CaptureActivity"
             android:exported="true"
             android:excludeFromRecents="true"
-            android:theme="@style/Theme.GtdFlow.Dialog" />
+            android:windowSoftInputMode="adjustResize|stateVisible"
+            android:theme="@style/Theme.GtdFlow.BottomSheet" />
+
+        <!-- Шторка деталей события/задачи (тап по элементу «Сегодня»/«Агенды») -->
+        <activity
+            android:name=".ui.EventSheetActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.GtdFlow.BottomSheet" />
+
+        <!-- Малый оверлей правки задачи «Входящих» (тап по задаче) -->
+        <activity
+            android:name=".ui.InboxTaskSheetActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.GtdFlow.BottomSheet" />
 
         <!-- Конфигуратор виджета «Входящие»: выбор пространства -->
         <activity
             android:name=".inbox.InboxConfigActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.GtdFlow.Dialog">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
+        <!-- Конфигуратор виджета «Агенда»: число дней -->
+        <activity
+            android:name=".agenda.AgendaConfigActivity"
             android:exported="true"
             android:excludeFromRecents="true"
             android:theme="@style/Theme.GtdFlow.Dialog">
@@ -61,6 +89,19 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/inbox_widget_info" />
+        </receiver>
+
+        <!-- Виджет «Агенда» -->
+        <receiver
+            android:name=".agenda.AgendaWidgetReceiver"
+            android:exported="true"
+            android:label="@string/agenda_widget_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/agenda_widget_info" />
         </receiver>
     </application>
 </manifest>

@@ -32,9 +32,7 @@ import androidx.glance.layout.width
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
-import androidx.glance.unit.ColorProvider
 import com.gtdflow.widget.data.AppStore
-import com.gtdflow.widget.engine.DeepLink
 import com.gtdflow.widget.engine.TimeUtil
 import com.gtdflow.widget.engine.TodayItem
 import com.gtdflow.widget.engine.TodaySection
@@ -166,7 +164,7 @@ private fun TodayList(section: TodaySection, vaultName: String?, nowMinutes: Int
         section.items.forEachIndexed { idx, entry ->
             if (idx == nowIndex) item(itemId = NOW_LINE_ID) { NowLine(nowMinutes) }
             item(itemId = entry.file.hashCode() * 31L + entry.line) {
-                TodayCard(entry, isCurrentHour(entry, nowHour), vaultName)
+                FeedItemCard(entry, section.date, vaultName, isCurrentHour(entry, nowHour))
             }
         }
         // Маркер «сейчас» ниже всех элементов (текущее время позже последнего начала).
@@ -201,63 +199,6 @@ private fun NowLine(nowMinutes: Int) {
 }
 
 @Composable
-private fun TodayCard(item: TodayItem, currentHour: Boolean, vaultName: String?) {
-    val bg: ColorProvider =
-        if (currentHour) GlanceTheme.colors.primaryContainer else GlanceTheme.colors.surfaceVariant
-    val open = if (vaultName != null) {
-        actionStartActivity(
-            Intent(Intent.ACTION_VIEW, Uri.parse(DeepLink.open(vaultName, item.file)))
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-        )
-    } else {
-        actionRunCallback<RefreshWidgetsAction>()
-    }
-    Column(
-        modifier = GlanceModifier
-            .fillMaxWidth()
-            .padding(bottom = 6.dp),
-    ) {
-        Row(
-            modifier = GlanceModifier
-                .fillMaxWidth()
-                .background(bg)
-                .cornerRadius(10.dp)
-                .padding(horizontal = 10.dp, vertical = 8.dp)
-                .clickable(open),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = GlanceModifier.width(58.dp)) {
-                Text(
-                    text = timeLabel(item),
-                    style = TextStyle(
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = GlanceTheme.colors.onSurface,
-                    ),
-                )
-            }
-            Column(modifier = GlanceModifier.defaultWeight()) {
-                Text(
-                    text = (if (item.isEvent) "• " else "") + item.title,
-                    style = TextStyle(fontSize = 14.sp, color = GlanceTheme.colors.onSurface),
-                    maxLines = 2,
-                )
-                if (!item.location.isNullOrBlank()) {
-                    Text(
-                        text = "📍 ${item.location}",
-                        style = TextStyle(
-                            fontSize = 11.sp,
-                            color = GlanceTheme.colors.onSurfaceVariant,
-                        ),
-                        maxLines = 1,
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun CenterNote(text: String, onClick: Action? = null) {
     Column(
         modifier = GlanceModifier
@@ -272,10 +213,6 @@ private fun CenterNote(text: String, onClick: Action? = null) {
         )
     }
 }
-
-private fun timeLabel(item: TodayItem): String =
-    if (item.allDay || item.startMinutes == null) "весь\nдень"
-    else TimeUtil.formatRange(item.startMinutes, item.endMinutes)
 
 private fun isCurrentHour(item: TodayItem, nowHour: Int): Boolean {
     val start = item.startMinutes ?: return false

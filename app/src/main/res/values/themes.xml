@@ -8,4 +8,18 @@
         <item name="android:windowIsFloating">true</item>
         <item name="android:windowCloseOnTouchOutside">true</item>
     </style>
+
+    <!-- Прозрачный оверлей-лист поверх домашнего экрана (захват, шторка события,
+         правка входящей задачи). Окно не плавающее и не рисует свой фон — контент
+         (скрим + карточка снизу) целиком на Compose; лаунчер виден сквозь прозрачные
+         области. Клавиатура поднимает лист (adjustResize + imePadding в контенте). -->
+    <style name="Theme.GtdFlow.BottomSheet" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowAnimationStyle">@android:style/Animation.Translucent</item>
+    </style>
 </resources>

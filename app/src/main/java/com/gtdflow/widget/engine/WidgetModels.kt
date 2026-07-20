@@ -15,6 +15,8 @@ import kotlinx.serialization.json.Json
 @Serializable
 data class WidgetData(
     val today: TodaySection,
+    /** Секция агенды (список дней от сегодня); пуста, если agendaDays не запрашивался. */
+    val agenda: AgendaSection = AgendaSection(),
     val inbox: InboxSection,
     val namespaces: List<NamespaceDef> = emptyList(),
     val errors: List<String> = emptyList(),
@@ -29,8 +31,11 @@ data class TodaySection(
 
 @Serializable
 data class TodayItem(
-    /** "event" | "task". */
+    /** "event" | "task" (совместимость). */
     val kind: String,
+    /** Уточнённый вид: "single-event" | "series-occurrence" | "task". Может быть пуст
+     *  на старом контракте — тогда полагаемся на [kind]. */
+    val itemKind: String = "",
     val title: String,
     val startMinutes: Int? = null,
     val endMinutes: Int? = null,
@@ -40,9 +45,29 @@ data class TodayItem(
     /** 1-based. */
     val line: Int,
     val namespace: String,
+    /** Исходная строка файла — источник правок шторки (buildEditedLine) и точный якорь записи. */
+    val rawLine: String = "",
+    /** Текст правила 🔁 для вхождения серии; null для одноразового события/задачи. */
+    val recurrenceText: String? = null,
 ) {
     val isEvent: Boolean get() = kind == "event"
+
+    /** Вхождение повторяющейся серии (правка правит всю серию, дату двигать нельзя). */
+    val isSeriesOccurrence: Boolean get() = itemKind == "series-occurrence"
 }
+
+/** Секция агенды: дни от сегодня включительно (число задаёт конфиг виджета). */
+@Serializable
+data class AgendaSection(
+    val days: List<AgendaDay> = emptyList(),
+)
+
+/** Один день агенды: ISO-дата и лента того же состава/сортировки, что today.items. */
+@Serializable
+data class AgendaDay(
+    val date: String,
+    val items: List<TodayItem> = emptyList(),
+)
 
 @Serializable
 data class InboxSection(
@@ -59,6 +84,8 @@ data class InboxItem(
     val line: Int,
     val id: String? = null,
     val location: String? = null,
+    /** Пространство файла-источника (метка) — показывается в агрегате «Все». */
+    val namespace: String = "",
 )
 
 /** Пользовательское пространство (для конфигуратора виджета входящих). */

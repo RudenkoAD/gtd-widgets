@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import com.gtdflow.widget.engine.EngineRunner
 import com.gtdflow.widget.engine.QuickJsEngine
+import com.gtdflow.widget.inbox.CaptureNamespace
 import com.gtdflow.widget.vault.VaultManager
 import com.gtdflow.widget.vault.VaultReader
 import com.gtdflow.widget.vault.VaultWriter
@@ -38,7 +39,8 @@ object CaptureService {
         val built = try {
             EngineRunner.use(context) { engine ->
                 val line = engine.buildCaptureLine(text, location)
-                val target = engine.captureTargetPath(dataJson, namespace)
+                // «Все»/«Общее» → null (пишем в «Общее»); иначе — конкретное пространство.
+                val target = engine.captureTargetPath(dataJson, CaptureNamespace.forWrite(namespace))
                 line to target
             }
         } catch (e: QuickJsEngine.EngineException) {

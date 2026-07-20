@@ -91,12 +91,15 @@ class InboxConfigActivity : ComponentActivity() {
 @Composable
 private fun ConfigScreen(onPick: (String) -> Unit) {
     val context = LocalContext.current
-    var labels by remember { mutableStateOf(listOf(InboxWidgetState.DEFAULT_NAMESPACE, "Все")) }
+    // «Все» — первый пункт (дефолт нового экземпляра — агрегат всех пространств).
+    var labels by remember {
+        mutableStateOf(listOf(InboxWidgetState.ALL_NAMESPACE, InboxWidgetState.DEFAULT_NAMESPACE))
+    }
 
     LaunchedEffect(Unit) {
         val user = runCatching { NamespaceCatalog.userNamespaces(context).map { it.name } }
             .getOrDefault(emptyList())
-        labels = (listOf(InboxWidgetState.DEFAULT_NAMESPACE, "Все") + user).distinct()
+        labels = (listOf(InboxWidgetState.ALL_NAMESPACE, InboxWidgetState.DEFAULT_NAMESPACE) + user).distinct()
     }
 
     Column(

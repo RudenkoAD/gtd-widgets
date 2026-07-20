@@ -66,3 +66,21 @@ function __gtdCaptureTarget(dataJson, namespace) {
         namespace == null ? null : namespace,
     );
 }
+
+/*
+ * Синхронная правка строки задачи/события для «шторки деталей». editsJson —
+ * JSON-объект {title?,date?,timeRange?,location?} (Kotlin строит его так, чтобы
+ * ПРИСУТСТВИЕ ключа означало «применить», а null — «снять поле»; отсутствие ключа —
+ * «не трогать»). Ядро возвращает уже готовую JSON-строку {ok:true,line}|{ok:false,error} —
+ * прокидываем её как есть (Kotlin разбирает). Битый editsJson не роняет вызов:
+ * возвращаем тот же контракт с ok:false, чтобы сторона Kotlin показала текст ошибки.
+ */
+function __gtdBuildEditedLine(rawLine, editsJson) {
+    var edits;
+    try {
+        edits = editsJson == null || editsJson === "" ? {} : JSON.parse(editsJson);
+    } catch (e) {
+        return JSON.stringify({ ok: false, error: "bad edits json: " + e });
+    }
+    return GtdWidgetCore.buildEditedLine(rawLine, edits);
+}

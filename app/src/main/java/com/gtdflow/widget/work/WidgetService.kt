@@ -7,7 +7,10 @@ import androidx.glance.appwidget.updateAll
 import androidx.glance.appwidget.state.getAppWidgetState
 import androidx.glance.appwidget.state.updateAppWidgetState
 import androidx.glance.state.PreferencesGlanceStateDefinition
+import com.gtdflow.widget.agenda.AgendaWidget
+import com.gtdflow.widget.agenda.AgendaWidgetState
 import com.gtdflow.widget.data.AppStore
+import com.gtdflow.widget.engine.AgendaSection
 import com.gtdflow.widget.engine.EngineRunner
 import com.gtdflow.widget.engine.InboxSection
 import com.gtdflow.widget.engine.NamespaceDef
@@ -39,6 +42,7 @@ object WidgetService {
 
     private val todaySer = TodaySection.serializer()
     private val inboxSer = InboxSection.serializer()
+    private val agendaSer = AgendaSection.serializer()
     private val nsSer = ListSerializer(NamespaceDef.serializer())
 
     suspend fun refresh(context: Context) {
@@ -48,6 +52,7 @@ object WidgetService {
 
         val manager = GlanceAppWidgetManager(context)
         val inboxIds = manager.getGlanceIds(InboxWidget::class.java)
+        val agendaIds = manager.getGlanceIds(AgendaWidget::class.java)
 
         try {
             // Чтение vault — на IO (много IPC к SAF-провайдеру).
@@ -81,23 +86,43 @@ object WidgetService {
                         mutablePrefs.remove(InboxWidgetState.ERROR) // успех очищает ошибку
                     }
                 }
+
+                // «Агенда» — по одному расчёту на РАЗЛИЧНОЕ число дней (мемоизация)
+                val perDays = HashMap<Int, AgendaSection>()
+                for (id in agendaIds) {
+                    val prefs = getAppWidgetState(context, PreferencesGlanceStateDefinition, id)
+                    val days = AgendaWidgetState.daysOf(prefs)
+                    val section = perDays.getOrPut(days) {
+                        engine.compute(
+                            WidgetInput(snapshot.files, snapshot.dataJson, todayIso, nowMinutes, null, days),
+                        ).agenda
+                    }
+                    updateAppWidgetState(context, id) { mutablePrefs ->
+                        mutablePrefs[AgendaWidgetState.AGENDA_JSON] =
+                            WidgetJson.encodeToString(agendaSer, section)
+                        mutablePrefs[AgendaWidgetState.UPDATED] = updated
+                        mutablePrefs.remove(AgendaWidgetState.ERROR)
+                    }
+                }
             }
         } catch (t: Throwable) {
             // ЛЮБОЙ сбой (движок/чтение vault) — не роняем воркер и не оставляем
             // виджеты в вечной «Загрузка…»: сохраняем текст ошибки, чтобы провайдеры
             // показали «Ошибка: …» (тап → приложение). Обновление UI — ниже, всегда.
-            recordFailure(context, inboxIds, WidgetErrorText.forThrowable(t))
+            recordFailure(context, inboxIds, agendaIds, WidgetErrorText.forThrowable(t))
         }
 
         // Толкнуть перерисовку виджетов (провайдеры перечитают кэш/ошибку из состояния).
         TodayWidget().updateAll(context)
         InboxWidget().updateAll(context)
+        AgendaWidget().updateAll(context)
     }
 
-    /** Записать текст ошибки в кэш «сегодня» и в состояние каждого виджета «входящих». */
+    /** Записать текст ошибки в кэш «сегодня» и в состояние виджетов «входящих»/«агенды». */
     private suspend fun recordFailure(
         context: Context,
         inboxIds: List<androidx.glance.GlanceId>,
+        agendaIds: List<androidx.glance.GlanceId>,
         message: String,
     ) {
         val updated = TimeUtil.minutesToHhmm(TimeUtil.nowMinutes())
@@ -106,6 +131,12 @@ object WidgetService {
             updateAppWidgetState(context, id) { mutablePrefs ->
                 mutablePrefs[InboxWidgetState.ERROR] = message
                 mutablePrefs[InboxWidgetState.UPDATED] = updated
+            }
+        }
+        for (id in agendaIds) {
+            updateAppWidgetState(context, id) { mutablePrefs ->
+                mutablePrefs[AgendaWidgetState.ERROR] = message
+                mutablePrefs[AgendaWidgetState.UPDATED] = updated
             }
         }
     }

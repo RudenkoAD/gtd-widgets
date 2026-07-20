@@ -51,6 +51,21 @@ class QuickJsEngine private constructor(
     fun captureTargetPath(dataJson: String?, namespace: String?): String =
         callString("__gtdCaptureTarget", dataJson, namespace)
 
+    /**
+     * Синхронная правка строки задачи/события ядром. [editsJson] — JSON-объект правок
+     * (см. [LineEdits.toJson]); возвращает JSON-строку контракта
+     * {ok:true,line}|{ok:false,error} (разбирается [EditLineReply]). Исключение движка
+     * заворачивается в [EngineException].
+     */
+    fun buildEditedLine(rawLine: String, editsJson: String): String =
+        try {
+            callString("__gtdBuildEditedLine", rawLine, editsJson)
+        } catch (e: EngineException) {
+            throw e
+        } catch (e: Exception) {
+            throw EngineException("buildEditedLine failed: ${e.message}", e)
+        }
+
     // --- низкоуровневые вызовы моста ---
 
     private fun callVoid(fn: String, vararg args: Any?) {
