@@ -15,9 +15,18 @@ class TimeUtilTest {
     }
 
     @Test
-    fun minutesToHhmmClamps() {
+    fun minutesToHhmmClampsNegativeAndWrapsPastMidnight() {
         assertEquals("00:00", TimeUtil.minutesToHhmm(-30))
-        assertEquals("23:59", TimeUtil.minutesToHhmm(9999))
+        // ≥ 24ч — заворот по модулю суток (конец события за полночь)
+        assertEquals("00:00", TimeUtil.minutesToHhmm(24 * 60))
+        assertEquals("01:00", TimeUtil.minutesToHhmm(25 * 60))
+        assertEquals("22:39", TimeUtil.minutesToHhmm(9999))
+    }
+
+    @Test
+    fun formatRangeWrapsPastMidnightEnd() {
+        // событие 23:00–01:00 (конец = 25ч от полуночи начала)
+        assertEquals("23:00–01:00", TimeUtil.formatRange(23 * 60, 25 * 60))
     }
 
     @Test
