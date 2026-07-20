@@ -1,0 +1,45 @@
+{
+  "today": {
+    "date": "2026-07-20",
+    "items": [
+      {
+        "kind": "event",
+        "title": "Встреча",
+        "startMinutes": 600,
+        "endMinutes": 660,
+        "allDay": false,
+        "location": "офис",
+        "file": "GTD/События.md",
+        "line": 4,
+        "namespace": "Общее"
+      },
+      {
+        "kind": "task",
+        "title": "Позвонить врачу",
+        "startMinutes": 840,
+        "endMinutes": null,
+        "allDay": false,
+        "location": null,
+        "file": "GTD/Задачи.md",
+        "line": 1,
+        "namespace": "Общее"
+      }
+    ],
+    "generatedAt": "2026-07-20T08:30"
+  },
+  "inbox": {
+    "namespace": "Работа",
+    "items": []
+  },
+  "namespaces": [
+    {
+      "name": "Работа",
+      "root": "Работа"
+    },
+    {
+      "name": "Жизнь",
+      "root": "Жизнь"
+    }
+  ],
+  "errors": []
+}

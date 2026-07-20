@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.GtdFlow">
+
+        <!-- Экран управления: статус vault, выбор папки, обновление, дамп для отладки -->
+        <activity
+            android:name=".ui.MainActivity"
+            android:exported="true"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Быстрый захват из виджета «Входящие» (диалоговая тема поверх домашнего экрана) -->
+        <activity
+            android:name=".ui.CaptureActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.GtdFlow.Dialog" />
+
+        <!-- Конфигуратор виджета «Входящие»: выбор пространства -->
+        <activity
+            android:name=".inbox.InboxConfigActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.GtdFlow.Dialog">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
+        <!-- Виджет «Сегодня» -->
+        <receiver
+            android:name=".today.TodayWidgetReceiver"
+            android:exported="true"
+            android:label="@string/today_widget_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/today_widget_info" />
+        </receiver>
+
+        <!-- Виджет «Входящие» -->
+        <receiver
+            android:name=".inbox.InboxWidgetReceiver"
+            android:exported="true"
+            android:label="@string/inbox_widget_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/inbox_widget_info" />
+        </receiver>
+    </application>
+</manifest>

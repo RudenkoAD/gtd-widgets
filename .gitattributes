@@ -1,0 +1,12 @@
+# Нормализация переводов строк. gradlew ДОЛЖЕН оставаться LF, иначе Linux-CI не
+# запустит его (bad interpreter из-за CR). Остальной текст — LF в репозитории.
+* text=auto eol=lf
+*.bat text eol=crlf
+gradlew text eol=lf
+
+# Бинарные артефакты — без нормализации.
+*.jar binary
+*.keystore binary
+*.jks binary
+*.png binary
+*.apk binary

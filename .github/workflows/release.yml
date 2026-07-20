@@ -1,0 +1,87 @@
+# Релиз «GTD Flow Виджеты»: по пушу тега vX.Y.Z собираем release-APK и публикуем
+# его в GitHub Release как gtd-widgets.apk.
+#
+# ПОДПИСЬ (секреты — вне репозитория): если заданы секреты KEYSTORE_B64 (base64
+# release-keystore) и KEYSTORE_PASSWORD, шаг «Prepare signing» декодирует keystore
+# во временную папку раннера и пишет keystore.properties — тот же файл-конвенцию,
+# что читает app/build.gradle.kts (signingConfig подхватывается ТОЛЬКО при наличии
+# keystore.properties). Если секретов нет — release собирается с debug-подписью,
+# сборка НЕ падает. Алиас ключа берётся из необязательного секрета KEYSTORE_ALIAS
+# (по умолчанию gtdwidgets, как в scripts/make-keystore.ps1).
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  # Ручной прогон (например, проверить сборку без создания релиза).
+  workflow_dispatch:
+
+permissions:
+  contents: write # нужно для создания GitHub Release и загрузки ассета
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      # Android SDK на ubuntu-latest предустановлен; действие лишь принимает лицензии
+      # и гарантирует наличие sdkmanager (AGP до-скачает platform/build-tools при нужде).
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Prepare signing (из секретов, опционально)
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEYSTORE_ALIAS: ${{ secrets.KEYSTORE_ALIAS }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ] && [ -n "$KEYSTORE_PASSWORD" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+            alias="${KEYSTORE_ALIAS:-gtdwidgets}"
+            {
+              echo "storeFile=$RUNNER_TEMP/release.keystore"
+              echo "storePassword=$KEYSTORE_PASSWORD"
+              echo "keyAlias=$alias"
+              echo "keyPassword=$KEYSTORE_PASSWORD"
+            } > keystore.properties
+            echo "Release будет подписан переданным keystore."
+          else
+            echo "Секретов подписи нет — release с debug-подписью."
+          fi
+
+      - name: Build release APK
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon assembleRelease
+
+      - name: Remove signing secrets
+        if: always()
+        run: rm -f keystore.properties "$RUNNER_TEMP/release.keystore"
+
+      - name: Stage APK as gtd-widgets.apk
+        run: cp app/build/outputs/apk/release/app-release.apk gtd-widgets.apk
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gtd-widgets-apk
+          path: gtd-widgets.apk
+
+      # GitHub Release создаётся только для пуша тега (не для workflow_dispatch).
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: gtd-widgets.apk
+          fail_on_unmatched_files: true
+          generate_release_notes: true

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Экраны Compose используют Material3, поэтому базовая тема — Material3.DayNight
+         без ActionBar. Диалоговая тема — для CaptureActivity/InboxConfigActivity. -->
+    <style name="Theme.GtdFlow" parent="Theme.Material3.DayNight.NoActionBar" />
+
+    <style name="Theme.GtdFlow.Dialog" parent="Theme.Material3.DayNight.Dialog">
+        <item name="android:windowIsFloating">true</item>
+        <item name="android:windowCloseOnTouchOutside">true</item>
+    </style>
+</resources>

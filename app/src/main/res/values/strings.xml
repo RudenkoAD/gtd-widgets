@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">GTD Flow Widgets</string>
+
+    <string name="today_widget_label">GTD · Сегодня</string>
+    <string name="today_widget_description">Почасовая лента дня из vault Obsidian</string>
+    <string name="inbox_widget_label">GTD · Входящие</string>
+    <string name="inbox_widget_description">Список входящих задач пространства</string>
+
+    <!-- MainActivity -->
+    <string name="main_title">GTD Flow · виджеты</string>
+    <string name="vault_not_selected">Vault не выбран</string>
+    <string name="vault_selected">Vault: %1$s</string>
+    <string name="choose_vault">Выбрать vault</string>
+    <string name="refresh_widgets">Обновить виджеты</string>
+    <string name="preview_title">Предпросмотр данных</string>
+    <string name="instructions">Инструкция</string>
+
+    <!-- Capture -->
+    <string name="capture_hint">Что во входящие?</string>
+    <string name="capture_location_hint">Место (📍, необязательно)</string>
+    <string name="capture_submit">Во входящие</string>
+    <string name="capture_cancel">Отмена</string>
+
+    <!-- Widgets -->
+    <string name="widget_free_day">Свободно 🎉</string>
+    <string name="widget_loading">Загрузка…</string>
+    <string name="widget_no_vault">Откройте приложение и выберите vault</string>
+    <string name="widget_all_day">Весь день</string>
+    <string name="inbox_empty">Входящих нет</string>
+    <string name="inbox_add">Добавить во входящие</string>
+
+    <!-- Config -->
+    <string name="config_title">Пространство виджета</string>
+    <string name="config_ok">Готово</string>
+</resources>

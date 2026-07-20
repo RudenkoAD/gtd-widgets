@@ -1,0 +1,19 @@
+# --- Секреты подписи: НИКОГДА не коммитить ---
+keystore.properties
+*.keystore
+*.jks
+
+# --- Сборка / кэши Gradle ---
+build/
+.gradle/
+*.hprof
+
+# --- Локальная конфигурация окружения (пути к SDK и т.п.) ---
+local.properties
+
+# --- IDE ---
+.idea/
+*.iml
+.kotlin/
+captures/
+.cxx/
