@@ -66,8 +66,13 @@ class InboxWidget : GlanceAppWidget() {
         val hasAccess = treeUri != null && VaultManager.hasAccess(context, treeUri)
         val gate = WidgetVaultGate.of(vault.isConfigured, hasAccess)
         val prefs: Preferences = getAppWidgetState(context, PreferencesGlanceStateDefinition, id)
-        // Пересчёт только при доступе — иначе refresh рано выйдет и «Загрузка…» зависнет.
-        if (gate == WidgetVaultGate.READY && prefs[InboxWidgetState.INBOX_JSON] == null) {
+        // Планируем пересчёт только при реальном доступе И только пока нет ни данных,
+        // ни зафиксированной ошибки — иначе refresh либо рано выйдет («Загрузка…»
+        // зависнет), либо будет молотить впустую при устойчивой ошибке (её показываем).
+        if (gate == WidgetVaultGate.READY &&
+            prefs[InboxWidgetState.INBOX_JSON] == null &&
+            prefs[InboxWidgetState.ERROR] == null
+        ) {
             RefreshScheduler.refreshNow(context)
         }
         val vaultName = vault.vaultName
@@ -84,6 +89,7 @@ private fun InboxContent(gate: WidgetVaultGate, vaultName: String?) {
     val prefs = currentState<Preferences>()
     val namespace = InboxWidgetState.namespaceOf(prefs)
     val updated = prefs[InboxWidgetState.UPDATED]
+    val error = prefs[InboxWidgetState.ERROR]
     val section = prefs[InboxWidgetState.INBOX_JSON]?.let {
         runCatching { WidgetJson.decodeFromString(InboxSection.serializer(), it) }.getOrNull()
     }
@@ -101,6 +107,7 @@ private fun InboxContent(gate: WidgetVaultGate, vaultName: String?) {
             WidgetVaultGate.ACCESS_LOST ->
                 Note("Доступ к vault потерян — откройте приложение и выберите папку", openAppAction())
             WidgetVaultGate.READY -> when {
+                section == null && error != null -> Note("Ошибка: $error", openAppAction())
                 section == null -> Note("Загрузка…")
                 section.items.isEmpty() -> Note("Входящих нет")
                 else -> InboxList(section, namespace, vaultName)

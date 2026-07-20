@@ -61,7 +61,13 @@ class AgendaWidget : GlanceAppWidget() {
         val hasAccess = treeUri != null && VaultManager.hasAccess(context, treeUri)
         val gate = WidgetVaultGate.of(vault.isConfigured, hasAccess)
         val prefs: Preferences = getAppWidgetState(context, PreferencesGlanceStateDefinition, id)
-        if (gate == WidgetVaultGate.READY && prefs[AgendaWidgetState.AGENDA_JSON] == null) {
+        // Планируем пересчёт только при реальном доступе И только пока нет ни данных,
+        // ни зафиксированной ошибки — иначе refresh либо рано выйдет («Загрузка…»
+        // зависнет), либо будет молотить впустую при устойчивой ошибке (её показываем).
+        if (gate == WidgetVaultGate.READY &&
+            prefs[AgendaWidgetState.AGENDA_JSON] == null &&
+            prefs[AgendaWidgetState.ERROR] == null
+        ) {
             RefreshScheduler.refreshNow(context)
         }
         val vaultName = vault.vaultName

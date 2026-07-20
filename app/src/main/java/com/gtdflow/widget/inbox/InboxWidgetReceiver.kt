@@ -13,4 +13,10 @@ class InboxWidgetReceiver : GlanceAppWidgetReceiver() {
         super.onEnabled(context)
         RefreshScheduler.ensurePeriodic(context)
     }
+
+    override fun onDisabled(context: Context) {
+        super.onDisabled(context)
+        // Последний экземпляр этого типа снят — периодика нужна, только если остались другие.
+        RefreshScheduler.cancelPeriodicIfNoWidgets(context)
+    }
 }

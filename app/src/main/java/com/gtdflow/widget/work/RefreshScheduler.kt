@@ -1,10 +1,14 @@
 package com.gtdflow.widget.work
 
 import android.content.Context
+import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import com.gtdflow.widget.agenda.AgendaWidget
+import com.gtdflow.widget.inbox.InboxWidget
 import com.gtdflow.widget.perf.Perf
+import com.gtdflow.widget.today.TodayWidget
 import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 
@@ -35,6 +39,27 @@ object RefreshScheduler {
             ExistingPeriodicWorkPolicy.KEEP,
             request,
         )
+    }
+
+    /**
+     * Снять периодику, когда на домашнем экране не осталось НИ ОДНОГО нашего виджета
+     * (зовётся из onDisabled каждого ресивера). Проверяем все три класса виджетов —
+     * onDisabled одного типа не значит, что нет других. Всё защитно (runCatching):
+     * сбой проверки не должен ронять broadcast, а лишняя периодика безобиднее креша.
+     */
+    fun cancelPeriodicIfNoWidgets(context: Context) {
+        val app = context.applicationContext
+        AppScope.scope.launch {
+            runCatching {
+                val manager = GlanceAppWidgetManager(app)
+                val remaining = manager.getGlanceIds(TodayWidget::class.java).size +
+                    manager.getGlanceIds(InboxWidget::class.java).size +
+                    manager.getGlanceIds(AgendaWidget::class.java).size
+                if (remaining == 0) {
+                    WorkManager.getInstance(app).cancelUniqueWork(PERIODIC_NAME)
+                }
+            }
+        }
     }
 
     /**
