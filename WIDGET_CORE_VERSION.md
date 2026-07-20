@@ -5,9 +5,9 @@
 
 | Параметр | Значение |
 | --- | --- |
-| Плагин-источник | `D:\projects\claude_home\calendar_app` (GTD Flow) |
-| Версия плагина | **0.8.0** (`manifest.json`) |
-| Коммит-источник | `4d9fca4869841b5060a6fcc12d75ce28f9d825b5` (ветка `master`) + незакоммиченные правки движка «раунд 13» в `src/widget` (agenda-дни, `itemKind`/`recurrenceText`/`namespace` в элементах, синхронный `buildEditedLine`) + фикс классификации `buildEditedLine`: повторяющаяся ЗАДАЧА (🔁 + поле-дата 📅/⏳/🛫) правится как задача, а не серия |
+| Плагин-источник | `RudenkoAD/gtd-flow` (GTD Flow; канонический репозиторий плагина) |
+| Версия плагина | **0.9.1** (`manifest.json`) |
+| Коммит-источник | `bd3d88b` (ветка `master`) — уже включает правки «раунда 13» и widget-core v2 (коммит `0b8504d`) |
 | Команда сборки | `npm run build:widget-core` → `node esbuild.widget.mjs` |
 | Артефакт | `widget-core.js`, 85268 байт (UTF-8) |
 | SHA-256 | `afb881a2d85062a28bcfc5dec034a7769b114c42a007d6aef6c2ce7ca34b9473` |

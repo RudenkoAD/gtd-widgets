@@ -89,8 +89,9 @@ cd D:\projects\claude_home\gtd_widgets
 - `app/build/outputs/apk/release/app-release.apk` (R8 + shrinkResources;
   подпись — release-ключом при наличии `keystore.properties`, иначе debug).
 
-Юнит-тесты — чистый JVM (`app/src/test`, без Robolectric): модели/сериализация,
-`TimeUtil`, `DeepLink`, `InboxFileText`, `TaskLineToggle`.
+Юнит-тесты — чистый JVM (`app/src/test`, без Robolectric): 18 файлов тестов по
+пакетам `agenda`/`engine`/`inbox`/`today`/`vault`/`work` (модели/сериализация,
+утилиты времени, deep-link, правка строк, состояния виджетов и пр.).
 
 ## 6. Подпись (секреты — вне git)
 
