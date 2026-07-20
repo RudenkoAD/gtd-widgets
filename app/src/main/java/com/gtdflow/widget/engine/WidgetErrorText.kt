@@ -20,6 +20,15 @@ object WidgetErrorText {
     /** Готовая строка виджета: «Ошибка: <msg>». */
     fun widgetLine(t: Throwable): String = "Ошибка: ${forThrowable(t)}"
 
+    /**
+     * Метка «обновлено …» рядом с кэшированными данными. [updatedHhmm] — время
+     * последнего УСПЕШНОГО пересчёта (сбой метку НЕ двигает — см.
+     * WidgetService.recordFailure); [stale] — кэш показан, но последний пересчёт
+     * упал: добавляем ненавязчивое « · ошибка», чтобы не врать о свежести.
+     */
+    fun updatedLabel(updatedHhmm: String?, stale: Boolean): String =
+        (updatedHhmm ?: "—") + if (stale) " · ошибка" else ""
+
     private fun clip(s: String): String =
         if (s.length <= MAX_LEN) s else s.take(MAX_LEN - 1) + "…"
 }

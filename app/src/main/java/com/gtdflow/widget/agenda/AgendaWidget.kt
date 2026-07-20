@@ -36,6 +36,7 @@ import androidx.glance.text.TextStyle
 import com.gtdflow.widget.data.AppStore
 import com.gtdflow.widget.engine.AgendaSection
 import com.gtdflow.widget.engine.TimeUtil
+import com.gtdflow.widget.engine.WidgetErrorText
 import com.gtdflow.widget.engine.WidgetJson
 import com.gtdflow.widget.today.FeedItemCard
 import com.gtdflow.widget.ui.MainActivity
@@ -61,7 +62,13 @@ class AgendaWidget : GlanceAppWidget() {
         val hasAccess = treeUri != null && VaultManager.hasAccess(context, treeUri)
         val gate = WidgetVaultGate.of(vault.isConfigured, hasAccess)
         val prefs: Preferences = getAppWidgetState(context, PreferencesGlanceStateDefinition, id)
-        if (gate == WidgetVaultGate.READY && prefs[AgendaWidgetState.AGENDA_JSON] == null) {
+        // Планируем пересчёт только при реальном доступе И только пока нет ни данных,
+        // ни зафиксированной ошибки — иначе refresh либо рано выйдет («Загрузка…»
+        // зависнет), либо будет молотить впустую при устойчивой ошибке (её показываем).
+        if (gate == WidgetVaultGate.READY &&
+            prefs[AgendaWidgetState.AGENDA_JSON] == null &&
+            prefs[AgendaWidgetState.ERROR] == null
+        ) {
             RefreshScheduler.refreshNow(context)
         }
         val vaultName = vault.vaultName
@@ -87,7 +94,7 @@ private fun AgendaContent(gate: WidgetVaultGate, vaultName: String?) {
             .background(GlanceTheme.colors.widgetBackground)
             .padding(12.dp),
     ) {
-        Header(updated)
+        Header(updated, stale = section != null && error != null)
         Spacer(GlanceModifier.height(6.dp))
         when (gate) {
             WidgetVaultGate.SELECT_VAULT ->
@@ -115,7 +122,7 @@ private fun openAppAction(): Action =
     )
 
 @Composable
-private fun Header(updated: String?) {
+private fun Header(updated: String?, stale: Boolean) {
     Row(
         modifier = GlanceModifier
             .fillMaxWidth()
@@ -132,7 +139,8 @@ private fun Header(updated: String?) {
             modifier = GlanceModifier.defaultWeight(),
         )
         Text(
-            text = "обновлено ${updated ?: "—"} ⟳",
+            // stale: показан кэш, но последний пересчёт упал — честное « · ошибка».
+            text = "обновлено ${WidgetErrorText.updatedLabel(updated, stale)} ⟳",
             style = TextStyle(fontSize = 11.sp, color = GlanceTheme.colors.onSurfaceVariant),
         )
     }

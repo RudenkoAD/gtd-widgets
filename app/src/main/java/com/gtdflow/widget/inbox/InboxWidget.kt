@@ -41,6 +41,7 @@ import androidx.glance.text.TextStyle
 import com.gtdflow.widget.data.AppStore
 import com.gtdflow.widget.engine.InboxItem
 import com.gtdflow.widget.engine.InboxSection
+import com.gtdflow.widget.engine.WidgetErrorText
 import com.gtdflow.widget.engine.WidgetJson
 import com.gtdflow.widget.ui.CaptureActivity
 import com.gtdflow.widget.ui.InboxTaskSheetActivity
@@ -66,8 +67,13 @@ class InboxWidget : GlanceAppWidget() {
         val hasAccess = treeUri != null && VaultManager.hasAccess(context, treeUri)
         val gate = WidgetVaultGate.of(vault.isConfigured, hasAccess)
         val prefs: Preferences = getAppWidgetState(context, PreferencesGlanceStateDefinition, id)
-        // Пересчёт только при доступе — иначе refresh рано выйдет и «Загрузка…» зависнет.
-        if (gate == WidgetVaultGate.READY && prefs[InboxWidgetState.INBOX_JSON] == null) {
+        // Планируем пересчёт только при реальном доступе И только пока нет ни данных,
+        // ни зафиксированной ошибки — иначе refresh либо рано выйдет («Загрузка…»
+        // зависнет), либо будет молотить впустую при устойчивой ошибке (её показываем).
+        if (gate == WidgetVaultGate.READY &&
+            prefs[InboxWidgetState.INBOX_JSON] == null &&
+            prefs[InboxWidgetState.ERROR] == null
+        ) {
             RefreshScheduler.refreshNow(context)
         }
         val vaultName = vault.vaultName
@@ -84,6 +90,8 @@ private fun InboxContent(gate: WidgetVaultGate, vaultName: String?) {
     val prefs = currentState<Preferences>()
     val namespace = InboxWidgetState.namespaceOf(prefs)
     val updated = prefs[InboxWidgetState.UPDATED]
+    val error = prefs[InboxWidgetState.ERROR]
+    val notice = prefs[InboxWidgetState.NOTICE]
     val section = prefs[InboxWidgetState.INBOX_JSON]?.let {
         runCatching { WidgetJson.decodeFromString(InboxSection.serializer(), it) }.getOrNull()
     }
@@ -93,14 +101,20 @@ private fun InboxContent(gate: WidgetVaultGate, vaultName: String?) {
             .background(GlanceTheme.colors.widgetBackground)
             .padding(12.dp),
     ) {
-        Header(namespace, updated)
+        Header(namespace, updated, stale = section != null && error != null)
         Spacer(GlanceModifier.height(6.dp))
+        // Транзиентная заметка промаха чекбокса («Файл изменился — обновите виджет»):
+        // строкой НАД списком, не пряча данные; успешный пересчёт её снимет.
+        if (notice != null) {
+            NoticeLine(notice)
+        }
         when (gate) {
             WidgetVaultGate.SELECT_VAULT ->
                 Note("Откройте приложение и выберите vault", openAppAction())
             WidgetVaultGate.ACCESS_LOST ->
                 Note("Доступ к vault потерян — откройте приложение и выберите папку", openAppAction())
             WidgetVaultGate.READY -> when {
+                section == null && error != null -> Note("Ошибка: $error", openAppAction())
                 section == null -> Note("Загрузка…")
                 section.items.isEmpty() -> Note("Входящих нет")
                 else -> InboxList(section, namespace, vaultName)
@@ -118,7 +132,7 @@ private fun openAppAction(): Action =
     )
 
 @Composable
-private fun Header(namespace: String, updated: String?) {
+private fun Header(namespace: String, updated: String?, stale: Boolean) {
     Row(
         modifier = GlanceModifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -139,7 +153,8 @@ private fun Header(namespace: String, updated: String?) {
             )
             if (updated != null) {
                 Text(
-                    text = "обновлено $updated",
+                    // stale: показан кэш, но последний пересчёт упал — честное « · ошибка».
+                    text = "обновлено ${WidgetErrorText.updatedLabel(updated, stale)}",
                     style = TextStyle(fontSize = 10.sp, color = GlanceTheme.colors.onSurfaceVariant),
                 )
             }
@@ -242,6 +257,17 @@ private fun InboxRow(item: InboxItem, aggregate: Boolean, vaultName: String?) {
             )
         }
     }
+}
+
+/** Строка транзиентной заметки (промах чекбокса) над списком: заметно, но без модальности. */
+@Composable
+private fun NoticeLine(text: String) {
+    Text(
+        text = "⚠ $text",
+        modifier = GlanceModifier.fillMaxWidth().padding(bottom = 4.dp),
+        style = TextStyle(fontSize = 11.sp, color = GlanceTheme.colors.error),
+        maxLines = 2,
+    )
 }
 
 @Composable

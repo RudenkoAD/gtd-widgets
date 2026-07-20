@@ -72,11 +72,13 @@ object AppStore {
         }
     }
 
-    /** Сбой расчёта: сохраняем текст ошибки и метку времени (ленту не трогаем). */
-    suspend fun saveTodayError(context: Context, error: String, updatedHhmm: String) {
+    /**
+     * Сбой расчёта: сохраняем текст ошибки; ленту и метку «обновлено» НЕ трогаем —
+     * метка отражает последний УСПЕШНЫЙ расчёт (иначе виджет врал бы о свежести кэша).
+     */
+    suspend fun saveTodayError(context: Context, error: String) {
         context.appDataStore.edit { p ->
             p[KEY_TODAY_ERROR] = error
-            p[KEY_TODAY_UPDATED] = updatedHhmm
         }
     }
 

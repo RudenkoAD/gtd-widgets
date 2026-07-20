@@ -12,4 +12,10 @@ class TodayWidgetReceiver : GlanceAppWidgetReceiver() {
         super.onEnabled(context)
         RefreshScheduler.ensurePeriodic(context)
     }
+
+    override fun onDisabled(context: android.content.Context) {
+        super.onDisabled(context)
+        // Последний экземпляр этого типа снят — периодика нужна, только если остались другие.
+        RefreshScheduler.cancelPeriodicIfNoWidgets(context)
+    }
 }

@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.glance.GlanceId
 import androidx.glance.action.ActionParameters
 import androidx.glance.appwidget.action.ActionCallback
+import androidx.glance.appwidget.state.updateAppWidgetState
 import com.gtdflow.widget.perf.Perf
 import com.gtdflow.widget.vault.VaultManager
 import com.gtdflow.widget.vault.VaultWriter
@@ -24,12 +25,15 @@ import kotlinx.coroutines.withContext
  *
  * Порядок ради МГНОВЕННОГО отклика (раньше строка «висела» ~5 c до конца пересчёта):
  *  1. ОПТИМИСТИЧНО убрать строку из кэша всех виджетов «Входящие» и перерисовать —
- *     визуальный отклик за десятки мс, ещё ДО записи в файл.
+ *     визуальный отклик за десятки мс, ещё ДО записи в файл. Только когда записать
+ *     реально есть что (файл+строка+текст — InboxTogglePolicy): иначе исчезновение
+ *     было бы чистой визуальной ложью без изменения файла.
  *  2. Записать `- [x]` в файл (перечитывает актуальный файл, ищет строку по номеру,
- *     затем по тексту — см. TaskLineToggle; промах → строка вернётся на шаге 3).
+ *     затем по тексту — см. TaskLineToggle). Промах/сбой НЕ глотаем: пишем заметку
+ *     «Файл изменился — обновите виджет» в состояние виджета (снимет успешный пересчёт).
  *  3. Полный пересчёт из vault ИНЛАЙН со слиянием (goAsync держит процесс живым):
- *     сверяет все виджеты с честным состоянием. Промах записи → строка вернётся;
- *     сбой движка → виджет покажет ошибку.
+ *     сверяет все виджеты с честным состоянием. Промах записи → строка вернётся,
+ *     но уже С заметкой из шага 2; сбой движка → виджет покажет ошибку.
  */
 class InboxToggleAction : ActionCallback {
 
@@ -43,22 +47,39 @@ class InboxToggleAction : ActionCallback {
         val line = parameters[KEY_LINE]
         val title = parameters[KEY_TITLE]
 
-        // 1. Оптимистичный отклик — до записи и пересчёта.
-        if (file != null && line != null) {
-            OptimisticInbox.removeLine(context, file, line)
+        // Без полного набора файл+строка+текст записи НЕ будет — тогда и оптимистичное
+        // удаление недопустимо (строка исчезла бы чисто визуально и молча вернулась).
+        val canWrite = InboxTogglePolicy.canAttemptWrite(file, line, title)
+
+        // 1. Оптимистичный отклик — до записи и пересчёта (только если запись возможна).
+        if (canWrite) {
+            OptimisticInbox.removeLine(context, file!!, line!!)
         }
 
-        // 2. Запись в файл (IO).
-        if (file != null && line != null && title != null) {
+        // 2. Запись в файл (IO). Результат НЕ игнорируем: промах локатора (файл изменился
+        //    синком между рендером и тапом) или IO-сбой — покажем заметку, а не дадим
+        //    строке молча вернуться на пересчёте.
+        var attempted = false
+        var wrote = false
+        if (canWrite) {
             val treeUri = VaultManager.treeUri(context)
             if (treeUri != null && VaultManager.hasAccess(context, treeUri)) {
-                Perf.span("toggle.write") {
+                attempted = true
+                wrote = Perf.span("toggle.write") {
                     withContext(Dispatchers.IO) {
                         runCatching {
-                            VaultWriter.markInboxDone(context, treeUri, file, line, title)
-                        }
+                            VaultWriter.markInboxDone(context, treeUri, file!!, line!!, title!!)
+                        }.getOrDefault(false)
                     }
                 }
+            }
+        }
+
+        // Промах записи → транзиентная заметка этому виджету (тот же текст, что у шторок
+        // правки); следующий успешный пересчёт её снимет (WidgetService.refresh).
+        InboxTogglePolicy.noticeAfterWrite(attempted, wrote)?.let { notice ->
+            updateAppWidgetState(context, glanceId) { mutablePrefs ->
+                mutablePrefs[InboxWidgetState.NOTICE] = notice
             }
         }
 

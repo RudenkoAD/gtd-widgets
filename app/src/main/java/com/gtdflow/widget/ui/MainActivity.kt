@@ -35,6 +35,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gtdflow.widget.data.AppStore
+import com.gtdflow.widget.engine.WidgetErrorText
 import com.gtdflow.widget.vault.VaultManager
 import com.gtdflow.widget.work.DebugPreview
 import com.gtdflow.widget.work.RefreshScheduler
@@ -74,8 +75,14 @@ private fun MainScreen() {
     ) { uri ->
         if (uri != null) {
             scope.launch {
-                VaultManager.persist(context, uri)
-                RefreshScheduler.refreshNow(context)
+                // Отозванный грант / сбой SAF-провайдера не должен ронять процесс:
+                // ловим всё и показываем текст ошибки в блоке превью.
+                try {
+                    VaultManager.persist(context, uri)
+                    RefreshScheduler.refreshNow(context)
+                } catch (t: Throwable) {
+                    previewText = WidgetErrorText.widgetLine(t)
+                }
             }
         }
     }
@@ -83,9 +90,14 @@ private fun MainScreen() {
     fun refreshPreview() {
         previewLoading = true
         scope.launch {
-            previewText = when (val r = DebugPreview.build(context)) {
-                is DebugPreview.Result.Ready -> r.text
-                is DebugPreview.Result.Unavailable -> r.reason
+            // Сбой сборки превью (движок/SAF) — показываем «Ошибка: …», не роняем процесс.
+            previewText = try {
+                when (val r = DebugPreview.build(context)) {
+                    is DebugPreview.Result.Ready -> r.text
+                    is DebugPreview.Result.Unavailable -> r.reason
+                }
+            } catch (t: Throwable) {
+                WidgetErrorText.widgetLine(t)
             }
             previewLoading = false
         }

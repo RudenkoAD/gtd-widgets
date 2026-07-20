@@ -125,6 +125,7 @@ object WidgetService {
                             WidgetJson.encodeToString(inboxSer, section)
                         mutablePrefs[InboxWidgetState.UPDATED] = updated
                         mutablePrefs.remove(InboxWidgetState.ERROR) // успех очищает ошибку
+                        mutablePrefs.remove(InboxWidgetState.NOTICE) // …и заметку чекбокса
                     }
                 }
 
@@ -165,25 +166,28 @@ object WidgetService {
         Perf.mark("refresh.done total=${Perf.nowMs() - t0}ms")
     }
 
-    /** Записать текст ошибки в кэш «сегодня» и в состояние виджетов «входящих»/«агенды». */
+    /**
+     * Записать текст ошибки в кэш «сегодня» и в состояние виджетов «входящих»/«агенды».
+     *
+     * Метку UPDATED НЕ трогаем: она — время последнего УСПЕШНОГО расчёта. Раньше сбой
+     * тоже двигал её, и «обновлено HH:mm» врало о свежести кэша при устаревших данных.
+     * Индикацию несвежести у кэша рисуют провайдеры (WidgetErrorText.updatedLabel).
+     */
     private suspend fun recordFailure(
         context: Context,
         inboxIds: List<androidx.glance.GlanceId>,
         agendaIds: List<androidx.glance.GlanceId>,
         message: String,
     ) {
-        val updated = TimeUtil.minutesToHhmm(TimeUtil.nowMinutes())
-        AppStore.saveTodayError(context, message, updated)
+        AppStore.saveTodayError(context, message)
         for (id in inboxIds) {
             updateAppWidgetState(context, id) { mutablePrefs ->
                 mutablePrefs[InboxWidgetState.ERROR] = message
-                mutablePrefs[InboxWidgetState.UPDATED] = updated
             }
         }
         for (id in agendaIds) {
             updateAppWidgetState(context, id) { mutablePrefs ->
                 mutablePrefs[AgendaWidgetState.ERROR] = message
-                mutablePrefs[AgendaWidgetState.UPDATED] = updated
             }
         }
     }
