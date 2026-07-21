@@ -15,12 +15,15 @@ import com.gtdflow.widget.engine.EngineRunner
 import com.gtdflow.widget.engine.InboxSection
 import com.gtdflow.widget.engine.NamespaceDef
 import com.gtdflow.widget.engine.TimeUtil
+import com.gtdflow.widget.engine.TodayItem
 import com.gtdflow.widget.engine.TodaySection
 import com.gtdflow.widget.engine.WidgetErrorText
 import com.gtdflow.widget.engine.WidgetInput
 import com.gtdflow.widget.engine.WidgetJson
 import com.gtdflow.widget.inbox.InboxWidget
 import com.gtdflow.widget.inbox.InboxWidgetState
+import com.gtdflow.widget.nownext.NowNextAlarms
+import com.gtdflow.widget.nownext.NowNextWidget
 import com.gtdflow.widget.perf.Perf
 import com.gtdflow.widget.reminders.ReminderCandidate
 import com.gtdflow.widget.reminders.ReminderCandidates
@@ -93,10 +96,14 @@ object WidgetService {
         val manager = GlanceAppWidgetManager(context)
         val inboxIds = manager.getGlanceIds(InboxWidget::class.java)
         val agendaIds = manager.getGlanceIds(AgendaWidget::class.java)
+        val nowNextIds = manager.getGlanceIds(NowNextWidget::class.java)
 
         // Снимок времени телефона — общий для расчёта и планирования напоминаний.
         val todayIso = TimeUtil.todayIso()
         val nowMinutes = TimeUtil.nowMinutes()
+        // Элементы дня для аларма границы «Сейчас → Далее» (те же, что у «Сегодня»);
+        // null → расчёт не удался, аларм НЕ трогаем (не снимаем при сбое чтения).
+        var todayItems: List<TodayItem>? = null
         // Считать ли кандидатов на напоминания в этом проходе (гейт по настройкам —
         // не гонять лишний расчёт агенды, если оба тумблера выключены).
         val remindersActive = ReminderStore.prefs(context).anyEnabled
@@ -120,6 +127,7 @@ object WidgetService {
                     )
                 }
                 val updated = updatedFrom(base.today.generatedAt)
+                todayItems = base.today.items // для аларма границы «Сейчас → Далее»
                 AppStore.saveTodayCache(context, WidgetJson.encodeToString(todaySer, base.today), updated)
                 AppStore.saveNamespacesJson(context, WidgetJson.encodeToString(nsSer, base.namespaces))
 
@@ -199,11 +207,24 @@ object WidgetService {
             }
         }
 
+        // Перепланировать аларм границы «Сейчас → Далее» ТОЛЬКО при успешном расчёте
+        // (todayItems != null): при сбое чтения vault не снимаем уже поставленный переход.
+        // Нет виджета «Сейчас» (nowNextIds пуст) → аларм снимается. Ошибка планирования
+        // изолирована — не роняет пересчёт. Это НЕ уведомление: разрешения не нужны.
+        todayItems?.let { items ->
+            try {
+                NowNextAlarms.reschedule(context, nowNextIds.isNotEmpty(), items, nowMinutes, todayIso)
+            } catch (t: Throwable) {
+                Log.d("GtdWidget", "nownext alarm scheduling failed: ${t.message}")
+            }
+        }
+
         // Толкнуть перерисовку виджетов (провайдеры перечитают кэш/ошибку из состояния).
         Perf.span("refresh.update") {
             TodayWidget().updateAll(context)
             InboxWidget().updateAll(context)
             AgendaWidget().updateAll(context)
+            NowNextWidget().updateAll(context)
         }
         Perf.mark("refresh.done total=${Perf.nowMs() - t0}ms")
     }

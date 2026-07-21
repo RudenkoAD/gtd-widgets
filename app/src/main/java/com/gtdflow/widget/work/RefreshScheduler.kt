@@ -7,6 +7,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.gtdflow.widget.agenda.AgendaWidget
 import com.gtdflow.widget.inbox.InboxWidget
+import com.gtdflow.widget.nownext.NowNextWidget
 import com.gtdflow.widget.perf.Perf
 import com.gtdflow.widget.today.TodayWidget
 import kotlinx.coroutines.launch
@@ -52,9 +53,11 @@ object RefreshScheduler {
         AppScope.scope.launch {
             runCatching {
                 val manager = GlanceAppWidgetManager(app)
+                // «Захват» не считаем — ему пересчёт/периодика не нужны (чистая кнопка).
                 val remaining = manager.getGlanceIds(TodayWidget::class.java).size +
                     manager.getGlanceIds(InboxWidget::class.java).size +
-                    manager.getGlanceIds(AgendaWidget::class.java).size
+                    manager.getGlanceIds(AgendaWidget::class.java).size +
+                    manager.getGlanceIds(NowNextWidget::class.java).size
                 if (remaining == 0) {
                     WorkManager.getInstance(app).cancelUniqueWork(PERIODIC_NAME)
                 }

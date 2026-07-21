@@ -1071,6 +1071,7 @@ var GtdWidgetCore = (() => {
     let onDate = null;
     let eventTime;
     let eventTimeEnd;
+    let sawWhenDone = false;
     while (i < tokens.length) {
       const t = tokens[i];
       if (t === "at") {
@@ -1114,6 +1115,15 @@ var GtdWidgetCore = (() => {
         }
         if (until !== void 0) return { error: "duplicate 'until'" };
         until = dt;
+        i++;
+        continue;
+      }
+      if (t === "when") {
+        i++;
+        if (tokens[i] !== "done") return { error: "expected 'done' after 'when'" };
+        if (sawWhenDone) return { error: "duplicate 'when done'" };
+        sawWhenDone = true;
+        fromCompletion = true;
         i++;
         continue;
       }
@@ -1200,7 +1210,7 @@ var GtdWidgetCore = (() => {
       case "weekday-name":
         if (fromCompletion) {
           return {
-            error: `'every! ${unitTok}' is ambiguous \u2014 from-completion has no fixed weekday; use 'every! week' or 'every! N weeks'`
+            error: `'every! ${unitTok}' / 'every ${unitTok} when done' is ambiguous \u2014 from-completion has no fixed weekday; use 'every! week' or 'every week when done'`
           };
         }
         if (onWeekdays !== null || onMonthDay !== null || onDate !== null) {
@@ -1213,7 +1223,7 @@ var GtdWidgetCore = (() => {
         }
         if (fromCompletion && onWeekdays !== null) {
           return {
-            error: "'every! week on <weekday>' is contradictory \u2014 from-completion has no fixed weekday; drop the 'on' clause"
+            error: "'every! week on <weekday>' / 'every week on <weekday> when done' is contradictory \u2014 from-completion has no fixed weekday; drop the 'on' clause"
           };
         }
         return withTail({ freq: "weekly", n, byDay: onWeekdays ?? [] });
@@ -1224,7 +1234,7 @@ var GtdWidgetCore = (() => {
         if (fromCompletion) {
           if (onMonthDay !== null) {
             return {
-              error: "'every! month on the <day>' is contradictory \u2014 from-completion counts the day from the completion date; drop the 'on' clause"
+              error: "'every! month on the <day>' / 'every month on the <day> when done' is contradictory \u2014 from-completion counts the day from the completion date; drop the 'on' clause"
             };
           }
           return withTail({ freq: "monthly", n });
@@ -1240,7 +1250,7 @@ var GtdWidgetCore = (() => {
         if (fromCompletion) {
           if (onDate !== null) {
             return {
-              error: "'every! year on <month> <day>' is contradictory \u2014 from-completion counts the date from the completion date; drop the 'on' clause"
+              error: "'every! year on <month> <day>' / 'every year on <month> <day> when done' is contradictory \u2014 from-completion counts the date from the completion date; drop the 'on' clause"
             };
           }
           return withTail({ freq: "yearly", n });

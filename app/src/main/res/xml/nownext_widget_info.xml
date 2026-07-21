@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Провайдер виджета «Сейчас → Далее» (4×1, сжимаем до 3×1). Данные — общий кэш
+     «Сегодня» (конфиг не нужен). resizeMode=horizontal: ширину можно ужать до 3 ячеек
+     (minResizeWidth), тогда место 📍 прячется. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="250dp"
+    android:minHeight="48dp"
+    android:targetCellWidth="4"
+    android:targetCellHeight="1"
+    android:minResizeWidth="180dp"
+    android:minResizeHeight="40dp"
+    android:resizeMode="horizontal"
+    android:widgetCategory="home_screen"
+    android:description="@string/nownext_widget_description"
+    android:updatePeriodMillis="0"
+    android:initialLayout="@layout/glance_default_loading_layout" />

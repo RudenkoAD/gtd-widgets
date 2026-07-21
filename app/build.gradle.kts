@@ -26,8 +26,8 @@ android {
         applicationId = "com.gtdflow.widget"
         minSdk = 26 // java.time.LocalDate/LocalTime без десугаринга; Glance поддерживает 23+
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 4
+        versionName = "0.4.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

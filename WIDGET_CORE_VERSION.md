@@ -7,10 +7,10 @@
 | --- | --- |
 | Плагин-источник | `RudenkoAD/gtd-flow` (GTD Flow; канонический репозиторий плагина) |
 | Версия плагина | **0.10.0** (`manifest.json`) |
-| Коммит-источник | `3581887` (ветка `master`) — включает `every!` (from-completion recurrence, отказ серий-событий `series-completion-not-allowed`) и «гигиену» PR #1–#2 |
+| Коммит-источник | `bf77c45` (ветка `master`) — вдобавок к `every!` грамматика повторов читает Tasks-синтаксис «when done» как алиас `every` (повтор от даты выполнения) |
 | Команда сборки | `npm run build:widget-core` → `node esbuild.widget.mjs` |
-| Артефакт | `widget-core.js`, 88499 байт (UTF-8) |
-| SHA-256 | `d0aeec188319c452e80cda6569d056054110124fce5860ff1e981f380ca7e22c` |
+| Артефакт | `widget-core.js`, 88973 байт (UTF-8) |
+| SHA-256 | `7c896c9c0bbcfb31d0b46d525587d2ab8775aa612f40cbfea9f06e70d462944a` |
 
 ## Обновление ассета
 

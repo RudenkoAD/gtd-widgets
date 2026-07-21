@@ -92,6 +92,17 @@
             </intent-filter>
         </activity>
 
+        <!-- Конфигуратор виджета «Захват»: выбор пространства назначения -->
+        <activity
+            android:name=".capture.CaptureConfigActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.GtdFlow.Dialog">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
         <!-- Виджет «Сегодня» -->
         <receiver
             android:name=".today.TodayWidgetReceiver"
@@ -130,6 +141,37 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/agenda_widget_info" />
         </receiver>
+
+        <!-- Виджет «Захват» (1×1, кнопка ＋) -->
+        <receiver
+            android:name=".capture.CaptureWidgetReceiver"
+            android:exported="true"
+            android:label="@string/capture_widget_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/capture_widget_info" />
+        </receiver>
+
+        <!-- Виджет «Сейчас → Далее» (4×1) -->
+        <receiver
+            android:name=".nownext.NowNextWidgetReceiver"
+            android:exported="true"
+            android:label="@string/nownext_widget_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/nownext_widget_info" />
+        </receiver>
+
+        <!-- Аларм границы «Сейчас → Далее»: срабатывание AlarmManager → пересчёт виджетов -->
+        <receiver
+            android:name=".nownext.NowNextAlarmReceiver"
+            android:exported="false" />
 
         <!-- Напоминание по времени: срабатывание AlarmManager → показ уведомления -->
         <receiver

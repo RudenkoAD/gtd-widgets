@@ -8,6 +8,10 @@
     <string name="inbox_widget_description">Список входящих задач пространства</string>
     <string name="agenda_widget_label">GTD · Агенда</string>
     <string name="agenda_widget_description">Лента ближайших дней из vault Obsidian</string>
+    <string name="capture_widget_label">GTD · Захват</string>
+    <string name="capture_widget_description">Кнопка быстрого захвата во входящие</string>
+    <string name="nownext_widget_label">GTD · Сейчас</string>
+    <string name="nownext_widget_description">Что идёт сейчас и что следующее сегодня</string>
 
     <!-- MainActivity -->
     <string name="main_title">GTD Flow · виджеты</string>
@@ -31,6 +35,11 @@
     <string name="widget_all_day">Весь день</string>
     <string name="inbox_empty">Входящих нет</string>
     <string name="inbox_add">Добавить во входящие</string>
+
+    <!-- Now → Next: честное пустое состояние (см. NowNextLogic.EmptyReason) -->
+    <string name="nownext_empty_no_items">Сегодня событий нет</string>
+    <string name="nownext_empty_no_timed">Нет событий со временем</string>
+    <string name="nownext_empty_all_past">Сегодня больше ничего</string>
 
     <!-- Config -->
     <string name="config_title">Пространство виджета</string>
