@@ -895,7 +895,7 @@ var GtdWidgetCore = (() => {
   function defaultHasDue(t) {
     return t.due !== null;
   }
-  function defaultInboxConfig(_inboxSources, includePlain = false) {
+  function defaultInboxConfig(includePlain = false) {
     return { hasBoardTag: defaultHasBoardTag, hasDue: defaultHasDue, includePlain };
   }
 
@@ -1030,8 +1030,15 @@ var GtdWidgetCore = (() => {
   function parseRule(text) {
     const tokens = text.trim().toLowerCase().split(/[\s,]+/).filter((t) => t.length > 0);
     let i = 0;
-    if (tokens[i] !== "every") return { error: "rule must start with 'every'" };
-    i++;
+    let fromCompletion = false;
+    if (tokens[i] === "every!") {
+      fromCompletion = true;
+      i++;
+    } else if (tokens[i] === "every") {
+      i++;
+    } else {
+      return { error: "rule must start with 'every' (or 'every!' for from-completion)" };
+    }
     let n = 1;
     let hasN = false;
     const nTok = tokens[i];
@@ -1175,6 +1182,7 @@ var GtdWidgetCore = (() => {
       if (until !== void 0) out.until = until;
       if (eventTime !== void 0) out.eventTime = eventTime;
       if (eventTimeEnd !== void 0) out.eventTimeEnd = eventTimeEnd;
+      if (fromCompletion) out.fromCompletion = true;
       return out;
     };
     switch (kind) {
@@ -1190,6 +1198,11 @@ var GtdWidgetCore = (() => {
         }
         return withTail({ freq: "weekdays" });
       case "weekday-name":
+        if (fromCompletion) {
+          return {
+            error: `'every! ${unitTok}' is ambiguous \u2014 from-completion has no fixed weekday; use 'every! week' or 'every! N weeks'`
+          };
+        }
         if (onWeekdays !== null || onMonthDay !== null || onDate !== null) {
           return { error: `'every ${unitTok}' does not take an 'on' clause` };
         }
@@ -1198,10 +1211,23 @@ var GtdWidgetCore = (() => {
         if (onMonthDay !== null || onDate !== null) {
           return { error: "weekly rules take only 'on <weekday, ...>'" };
         }
+        if (fromCompletion && onWeekdays !== null) {
+          return {
+            error: "'every! week on <weekday>' is contradictory \u2014 from-completion has no fixed weekday; drop the 'on' clause"
+          };
+        }
         return withTail({ freq: "weekly", n, byDay: onWeekdays ?? [] });
       case "monthly":
         if (onWeekdays !== null || onDate !== null) {
           return { error: "monthly rules take only 'on the <day>' / 'on the last day'" };
+        }
+        if (fromCompletion) {
+          if (onMonthDay !== null) {
+            return {
+              error: "'every! month on the <day>' is contradictory \u2014 from-completion counts the day from the completion date; drop the 'on' clause"
+            };
+          }
+          return withTail({ freq: "monthly", n });
         }
         if (onMonthDay === null) {
           return { error: "monthly rule requires 'on the <day>' or 'on the last day'" };
@@ -1210,6 +1236,14 @@ var GtdWidgetCore = (() => {
       case "yearly":
         if (onWeekdays !== null || onMonthDay !== null) {
           return { error: "yearly rules take only 'on <month-name> <day>'" };
+        }
+        if (fromCompletion) {
+          if (onDate !== null) {
+            return {
+              error: "'every! year on <month> <day>' is contradictory \u2014 from-completion counts the date from the completion date; drop the 'on' clause"
+            };
+          }
+          return withTail({ freq: "yearly", n });
         }
         if (onDate === null) return { error: "yearly rule requires 'on <month-name> <day>'" };
         return withTail({ freq: "yearly", n, month: onDate.month, day: onDate.day });
@@ -1232,13 +1266,24 @@ var GtdWidgetCore = (() => {
     if (until !== void 0 && compare(cand, until) > 0) return null;
     return cand;
   }
+  function nextInPhase(anchorDate, step, after) {
+    const anc = toEpochDays(anchorDate);
+    const delta = toEpochDays(after) - anc;
+    return fromEpochDays(anc + (Math.floor(delta / step) + 1) * step);
+  }
   function nextOccurrence(rule, after, anchor) {
+    if (rule.fromCompletion) return null;
     if (rule.from !== void 0 && compare(after, addDays(rule.from, -1)) < 0) {
       after = addDays(rule.from, -1);
     }
     switch (rule.freq) {
-      case "daily":
+      case "daily": {
+        const dailyAnchor = rule.from ?? anchor;
+        if (dailyAnchor !== void 0 && rule.n > 1) {
+          return capUntil(nextInPhase(dailyAnchor, rule.n, after), rule.until);
+        }
         return capUntil(addDays(after, rule.n), rule.until);
+      }
       case "weekdays": {
         let d = addDays(after, 1);
         for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
@@ -1249,6 +1294,10 @@ var GtdWidgetCore = (() => {
       }
       case "weekly": {
         if (rule.byDay.length === 0) {
+          const weeklyAnchor = rule.from ?? anchor;
+          if (weeklyAnchor !== void 0 && rule.n > 1) {
+            return capUntil(nextInPhase(weeklyAnchor, 7 * rule.n, after), rule.until);
+          }
           return capUntil(addDays(after, 7 * rule.n), rule.until);
         }
         const days = [...rule.byDay].sort((a, b) => a - b);
@@ -1274,11 +1323,13 @@ var GtdWidgetCore = (() => {
         return capUntil(addDays(weekStart, stride + first), rule.until);
       }
       case "monthly": {
+        if (rule.day === void 0) return null;
+        const ruleDay = rule.day;
         const p = toParts(after);
         let y = p.y;
         let m = p.m;
         for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
-          const dom = rule.day === "last" ? daysInMonth2(y, m) : clampDay(y, m, rule.day);
+          const dom = ruleDay === "last" ? daysInMonth2(y, m) : clampDay(y, m, ruleDay);
           const cand = fromParts({ y, m, d: dom });
           if (compare(cand, after) > 0) return capUntil(cand, rule.until);
           m += rule.n;
@@ -1288,9 +1339,11 @@ var GtdWidgetCore = (() => {
         return null;
       }
       case "yearly": {
+        if (rule.month === void 0 || rule.day === void 0) return null;
+        const { month, day } = rule;
         let y = toParts(after).y;
         for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
-          const cand = fromParts({ y, m: rule.month, d: clampDay(y, rule.month, rule.day) });
+          const cand = fromParts({ y, m: month, d: clampDay(y, month, day) });
           if (compare(cand, after) > 0) return capUntil(cand, rule.until);
           y += rule.n;
         }
@@ -1306,14 +1359,16 @@ var GtdWidgetCore = (() => {
     let anc;
     if (rule.from !== void 0) anc = rule.from;
     else if (anchor !== void 0) anc = anchor;
-    else if (rule.freq === "weekly" && rule.byDay.length > 0 && rule.n > 1) anc = WEEK_PARITY_EPOCH;
-    else return void 0;
+    else if ((rule.freq === "weekly" || rule.freq === "daily") && rule.n > 1) {
+      anc = WEEK_PARITY_EPOCH;
+    } else return void 0;
     if (rule.freq === "weekly" && rule.byDay.length > 0) return snapWeekAnchor(anc, rule.byDay);
     return anc;
   }
   function expandOccurrences(rule, fromIso, toIso, cap = DEFAULT_OCCURRENCE_CAP, exclude, anchor) {
     const out = [];
     if (compare(fromIso, toIso) > 0 || cap <= 0) return out;
+    if (rule.fromCompletion) return out;
     const anc = effectiveAnchor(rule, anchor);
     let cur = nextOccurrence(rule, addDays(fromIso, -1), anc);
     while (cur !== null && compare(cur, toIso) <= 0 && out.length < cap) {
@@ -1824,11 +1879,19 @@ var GtdWidgetCore = (() => {
   var LIST_RE = /^([ \t]*)(?:[-*+]|\d+[.)])[ \t]+/;
   var HEADING_RE = /^#{1,6}\s/;
   var FENCE_RE = /^[ \t]*(```+|~~~+)/;
+  var BLOCKQUOTE_RE = /^((?:[ \t]{0,3}>[ \t]?)+)/;
+  function indentWidth(ws) {
+    let w = 0;
+    for (const ch of ws) w += ch === "	" ? 4 - w % 4 : 1;
+    return w;
+  }
   function scanSnapshotListItems(content) {
     const lines = content.split("\n");
     const items = [];
     const headings = [];
     const stack = [];
+    let stackBqDepth = 0;
+    let prevNonBlankIsList = false;
     let inFrontmatter = false;
     let inFence = false;
     let fenceMarker = "";
@@ -1842,39 +1905,57 @@ var GtdWidgetCore = (() => {
         if (line.trim() === "---") inFrontmatter = false;
         continue;
       }
-      const fence = FENCE_RE.exec(line);
+      const bq = BLOCKQUOTE_RE.exec(line);
+      const bqDepth = bq !== null ? (bq[1].match(/>/g) ?? []).length : 0;
+      const rest = bq !== null ? line.slice(bq[1].length) : line;
+      const fence = FENCE_RE.exec(rest);
       if (inFence) {
-        if (fence !== null && line.trim().startsWith(fenceMarker)) inFence = false;
+        if (fence !== null && rest.trim().startsWith(fenceMarker)) inFence = false;
+        if (line.trim() !== "") prevNonBlankIsList = false;
         continue;
       }
       if (fence !== null) {
         inFence = true;
         fenceMarker = fence[1];
+        prevNonBlankIsList = false;
         continue;
       }
-      if (HEADING_RE.test(line)) {
-        headings.push({
-          position: { start: { line: i }, end: { line: i } },
-          heading: line.replace(/^#{1,6}\s+/, "").trim()
-        });
+      if (HEADING_RE.test(rest)) {
+        if (bqDepth === 0) {
+          headings.push({
+            position: { start: { line: i }, end: { line: i } },
+            heading: rest.replace(/^#{1,6}\s+/, "").trim()
+          });
+        }
         stack.length = 0;
+        prevNonBlankIsList = false;
         continue;
       }
-      const lm = LIST_RE.exec(line);
+      const lm = LIST_RE.exec(rest);
       if (lm !== null) {
+        if (bqDepth === 0 && indentWidth(lm[1]) >= 4 && !prevNonBlankIsList) {
+          prevNonBlankIsList = false;
+          continue;
+        }
+        if (bqDepth !== stackBqDepth) {
+          stack.length = 0;
+          stackBqDepth = bqDepth;
+        }
         const indent = lm[1].length;
         while (stack.length > 0 && stack[stack.length - 1].indent >= indent) stack.pop();
         const parent = stack.length > 0 ? stack[stack.length - 1].line : -1;
         stack.push({ line: i, indent });
-        const tm = TASK_RE.exec(line);
+        const tm = TASK_RE.exec(rest);
         items.push({
           position: { start: { line: i }, end: { line: i } },
           task: tm !== null ? tm[1] : void 0,
           parent
         });
+        prevNonBlankIsList = true;
         continue;
       }
-      if (line.trim() === "" || !/^[ \t]/.test(line)) stack.length = 0;
+      if (rest.trim() === "" || !/^[ \t]/.test(rest)) stack.length = 0;
+      if (line.trim() !== "") prevNonBlankIsList = false;
     }
     return snapshotListItems(items, headings);
   }
@@ -2113,7 +2194,9 @@ var GtdWidgetCore = (() => {
       const tail = pr.timeEnd !== null ? `${pr.time}-${pr.timeEnd}` : pr.time;
       newRule = `${base} at ${tail}`;
     }
-    if (isParseError(parseRule(newRule))) return err("invalid-rule");
+    const parsed = parseRule(newRule);
+    if (isParseError(parsed)) return err("invalid-rule");
+    if (parsed.fromCompletion) return err("series-completion-not-allowed");
     if (tok.gap === "" && tok.payload === "") tok.gap = " ";
     tok.payload = newRule;
     return { ok: true, line: serializeTokens(t) };
@@ -2296,7 +2379,7 @@ var GtdWidgetCore = (() => {
         tasks: allTasks,
         today: todayIso,
         resolveDep,
-        settingsBits: defaultInboxConfig(void 0, settings.inboxIncludePlain),
+        settingsBits: defaultInboxConfig(settings.inboxIncludePlain),
         namespace: widgetFilter(inboxActive, settings)
       };
       for (const t of evaluate({ kind: "inbox" }, ctx)) {

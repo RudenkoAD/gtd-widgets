@@ -1,6 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- Напоминания по времени: уведомления (Android 13+), точный будильник, пересчёт после ребута -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!-- Напоминания по месту (геофенсы, opt-in). Фоновая геолокация нужна, чтобы
+         геофенс срабатывал, когда приложение не на переднем плане. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -26,6 +37,22 @@
             android:excludeFromRecents="true"
             android:windowSoftInputMode="adjustResize|stateVisible"
             android:theme="@style/Theme.GtdFlow.BottomSheet" />
+
+        <!-- Приём шаринга (ACTION_SEND text/plain): открывает тот же оверлей захвата,
+             préfill текстом/URL шаринга, запись в «Общее». Метка видна в share-меню. -->
+        <activity
+            android:name=".ui.ShareCaptureActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:label="@string/share_target_label"
+            android:windowSoftInputMode="adjustResize|stateVisible"
+            android:theme="@style/Theme.GtdFlow.BottomSheet">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
 
         <!-- Шторка деталей события/задачи (тап по элементу «Сегодня»/«Агенды») -->
         <activity
@@ -102,6 +129,25 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/agenda_widget_info" />
+        </receiver>
+
+        <!-- Напоминание по времени: срабатывание AlarmManager → показ уведомления -->
+        <receiver
+            android:name=".reminders.ReminderReceiver"
+            android:exported="false" />
+
+        <!-- Напоминание по месту: срабатывание геофенса (Play Services) → показ уведомления -->
+        <receiver
+            android:name=".reminders.GeofenceReceiver"
+            android:exported="false" />
+
+        <!-- Пересчёт и перепланирование напоминаний после перезагрузки телефона -->
+        <receiver
+            android:name=".reminders.BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
         </receiver>
     </application>
 </manifest>

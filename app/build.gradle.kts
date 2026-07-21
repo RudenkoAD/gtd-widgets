@@ -106,6 +106,9 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.documentfile)
 
+    // Напоминания по месту (геофенсы) — Play Services Location
+    implementation(libs.play.services.location)
+
     // Движок ядра (widget-core.js в QuickJS) + разбор его JSON-вывода
     implementation(libs.quickjs.wrapper)
     implementation(libs.kotlinx.serialization.json)

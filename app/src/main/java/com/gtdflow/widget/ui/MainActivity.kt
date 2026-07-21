@@ -171,6 +171,11 @@ private fun MainScreen() {
 
         Spacer(Modifier.height(24.dp))
 
+        // --- Напоминания (по времени/по месту) ---
+        RemindersSettings()
+
+        Spacer(Modifier.height(24.dp))
+
         // --- Краткая инструкция ---
         Text(text = "Как пользоваться", style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(8.dp))

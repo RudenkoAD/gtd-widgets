@@ -35,4 +35,16 @@
     <!-- Config -->
     <string name="config_title">Пространство виджета</string>
     <string name="config_ok">Готово</string>
+
+    <!-- Share target -->
+    <string name="share_target_label">GTD: во входящие</string>
+
+    <!-- Reminders -->
+    <string name="reminders_title">Напоминания</string>
+    <string name="reminders_channel_name">Напоминания GTD</string>
+    <string name="reminders_channel_desc">Напоминания о событиях и задачах по времени и месту</string>
+    <string name="reminders_time_toggle">Напоминать по времени</string>
+    <string name="reminders_lead_label">За сколько предупреждать</string>
+    <string name="reminders_place_toggle">Напоминать по месту (геофенс)</string>
+    <string name="reminders_test">Пробное уведомление</string>
 </resources>

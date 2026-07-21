@@ -22,9 +22,14 @@ import com.gtdflow.widget.engine.WidgetJson
 import com.gtdflow.widget.inbox.InboxWidget
 import com.gtdflow.widget.inbox.InboxWidgetState
 import com.gtdflow.widget.perf.Perf
+import com.gtdflow.widget.reminders.ReminderCandidate
+import com.gtdflow.widget.reminders.ReminderCandidates
+import com.gtdflow.widget.reminders.ReminderScheduler
+import com.gtdflow.widget.reminders.ReminderStore
 import com.gtdflow.widget.today.TodayWidget
 import com.gtdflow.widget.vault.VaultManager
 import com.gtdflow.widget.vault.VaultReader
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
@@ -47,6 +52,9 @@ object WidgetService {
     private val inboxSer = InboxSection.serializer()
     private val agendaSer = AgendaSection.serializer()
     private val nsSer = ListSerializer(NamespaceDef.serializer())
+
+    /** Горизонт напоминаний ~36 ч укладывается в 3 дня агенды (сегодня + 2). */
+    private const val REMINDER_DAYS = 3
 
     // --- слияние (coalesce) пересчётов ---
     private val refreshMutex = Mutex()
@@ -86,6 +94,15 @@ object WidgetService {
         val inboxIds = manager.getGlanceIds(InboxWidget::class.java)
         val agendaIds = manager.getGlanceIds(AgendaWidget::class.java)
 
+        // Снимок времени телефона — общий для расчёта и планирования напоминаний.
+        val todayIso = TimeUtil.todayIso()
+        val nowMinutes = TimeUtil.nowMinutes()
+        // Считать ли кандидатов на напоминания в этом проходе (гейт по настройкам —
+        // не гонять лишний расчёт агенды, если оба тумблера выключены).
+        val remindersActive = ReminderStore.prefs(context).anyEnabled
+        // null → расчёт не удался, напоминания НЕ трогаем (не стираем при сбое чтения).
+        var reminderCandidates: List<ReminderCandidate>? = null
+
         Perf.mark("refresh.start")
         val t0 = Perf.nowMs()
         try {
@@ -93,8 +110,6 @@ object WidgetService {
             val snapshot = Perf.span("scan.total") {
                 withContext(Dispatchers.IO) { VaultReader.read(context, treeUri) }
             }
-            val todayIso = TimeUtil.todayIso()
-            val nowMinutes = TimeUtil.nowMinutes()
 
             Perf.span("engine.total", extra = " files=${snapshot.files.size}") {
             EngineRunner.use(context) { engine ->
@@ -148,6 +163,22 @@ object WidgetService {
                         mutablePrefs.remove(AgendaWidgetState.ERROR)
                     }
                 }
+
+                // Кандидаты на напоминания — из агенды на REMINDER_DAYS дней (сегодня + 2,
+                // покрывает горизонт ~36 ч). Мемоизируем в perDays: если агенда-виджет уже
+                // считает столько же дней, расчёт разделяется. Если оба тумблера выключены —
+                // не считаем и НЕ трогаем планировщик (candidates остаётся null); отмену при
+                // выключении тумблера делает сам экран настроек.
+                if (remindersActive) {
+                    val reminderAgenda = perDays.getOrPut(REMINDER_DAYS) {
+                        Perf.span("engine.compute", extra = " kind=reminders days=$REMINDER_DAYS") {
+                            engine.compute(
+                                WidgetInput(snapshot.files, snapshot.dataJson, todayIso, nowMinutes, null, REMINDER_DAYS),
+                            ).agenda
+                        }
+                    }
+                    reminderCandidates = ReminderCandidates.from(reminderAgenda)
+                }
             }
             } // engine.total
         } catch (t: Throwable) {
@@ -155,6 +186,17 @@ object WidgetService {
             // виджеты в вечной «Загрузка…»: сохраняем текст ошибки, чтобы провайдеры
             // показали «Ошибка: …» (тап → приложение). Обновление UI — ниже, всегда.
             recordFailure(context, inboxIds, agendaIds, WidgetErrorText.forThrowable(t))
+        }
+
+        // Перепланировать напоминания ТОЛЬКО при успешном расчёте (candidates != null):
+        // при сбое чтения vault не стираем уже поставленные будильники/геофенсы. Ошибка
+        // планирования изолирована — не роняет пересчёт и не помечает виджеты ошибкой.
+        reminderCandidates?.let { candidates ->
+            try {
+                ReminderScheduler.onRefresh(context, candidates, todayIso)
+            } catch (t: Throwable) {
+                Log.d("GtdRem", "reminder scheduling failed: ${t.message}")
+            }
         }
 
         // Толкнуть перерисовку виджетов (провайдеры перечитают кэш/ошибку из состояния).

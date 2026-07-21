@@ -6,11 +6,11 @@
 | Параметр | Значение |
 | --- | --- |
 | Плагин-источник | `RudenkoAD/gtd-flow` (GTD Flow; канонический репозиторий плагина) |
-| Версия плагина | **0.9.1** (`manifest.json`) |
-| Коммит-источник | `bd3d88b` (ветка `master`) — уже включает правки «раунда 13» и widget-core v2 (коммит `0b8504d`) |
+| Версия плагина | **0.10.0** (`manifest.json`) |
+| Коммит-источник | `3581887` (ветка `master`) — включает `every!` (from-completion recurrence, отказ серий-событий `series-completion-not-allowed`) и «гигиену» PR #1–#2 |
 | Команда сборки | `npm run build:widget-core` → `node esbuild.widget.mjs` |
-| Артефакт | `widget-core.js`, 85268 байт (UTF-8) |
-| SHA-256 | `afb881a2d85062a28bcfc5dec034a7769b114c42a007d6aef6c2ce7ca34b9473` |
+| Артефакт | `widget-core.js`, 88499 байт (UTF-8) |
+| SHA-256 | `d0aeec188319c452e80cda6569d056054110124fce5860ff1e981f380ca7e22c` |
 
 ## Обновление ассета
 

@@ -18,3 +18,4 @@ local.properties
 captures/
 .cxx/
 verify/
+hs_err_pid*.log
